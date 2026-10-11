@@ -211,6 +211,8 @@ npx tgcloud run endpoints/getProfile '{}' --ctx '{ initData: { user: { id: 123, 
 монохромный интерфейс — cloud revision 2. Дедлайны и backend напоминаний
 опубликованы 11 октября 2026 — cloud revision 3.
 В тот же день подключён GitHub Actions и включены напоминания — revision 4.
+Календарь, прокручиваемый выбор времени и самостоятельные напоминания
+опубликованы 11 октября 2026 — revision 5, без новой миграции.
 Таблица tasks создана безопасной миграцией. Webhook установлен для message и
 callback_query, накопленные обновления обработаны. Mini App доступен по адресу
 https://app8347651382.tgcloud.ai/.

@@ -193,3 +193,20 @@ WebApp SDK и тестовым перехватом транспорта. В с�
 повторные callback и удаление. Реальный Telegram runtime listReminders через
 CLI успешно загрузил новые модули и выполнил SDK LIKE/NOT LIKE запросы.
 Этот CLI-контекст разработчика не является проверкой подлинности initData.
+
+Код сначала загружен в marsen5689/SyToDoBot-, main, commit 62b9de6, чтобы
+GitHub runner использовал обновлённую логику. Затем опубликованы модули и dist
+через официальный CLI: cloud revision 5. status подтвердил чистое состояние,
+webhook in sync и 9 статических файлов. Все 9 файлов вернули HTTP 200 и
+совпали с dist по SHA-256. Каждый из 6 новых endpoints вернул HTTP 401 на
+запрос с подставленными userId и ctx в JSON body, без подписанного initData.
+getReminderCapabilities в настоящем runtime вернул enabled:true,
+precisionMinutes:5. База в sync; миграции в этом обновлении не выполнялись.
+
+GitHub Actions на новом commit:
+https://github.com/marsen5689/SyToDoBot-/actions/runs/38125702747 — success,
+event workflow_dispatch. Новая логика worker успешно загрузилась в Telegram.
+Доставка самостоятельного напоминания в настоящий пользовательский чат
+в этом обновлении ещё не подтверждена; доставка напоминания по задаче ранее
+подтверждена пользователем. Тесты самостоятельной отправки используют SQLite
+и тестовый Bot API, production-записи для проверки не создавались.
