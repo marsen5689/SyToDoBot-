@@ -1,4 +1,4 @@
-import { table, integer, text, boolean, index, check, sql } from 'sdk/db';
+import { table, integer, text, boolean, json, index, check, sql } from 'sdk/db';
 
 export const tasks = table('tasks', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -13,6 +13,8 @@ export const tasks = table('tasks', {
   reminderMinutes: integer('reminder_minutes'),
   reminderAt: integer('reminder_at'),
   reminderSentAt: integer('reminder_sent_at'),
+  recurrence: json('recurrence'),
+  lastReminderDueAt: integer('last_reminder_due_at'),
   reminderLeaseUntil: integer('reminder_lease_until'),
   scheduleVersion: integer('schedule_version').notNull().default(0),
   createdAt: integer('created_at').notNull(),

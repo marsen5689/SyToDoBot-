@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { Task } from './types';
+import type { Task, RepeatMode } from './types';
 import { api, ApiError, errorMessage } from './api';
 import { Sheet } from './Sheet';
 import { DateTimePicker } from './DateTimePicker';
+import { ReminderTiming } from './ReminderTiming';
+import { RepeatFields } from './RepeatFields';
 import { localDateInput, parseSchedule } from './schedule';
 import { requestReminderPermission } from './reminderPermission';
 import { useReminderCapabilities } from './useReminderCapabilities';
@@ -14,6 +16,10 @@ export function ReminderForm({ item, onClose, onSaved }: { item?: Task; onClose:
   const [title, setTitle] = useState(item?.title ?? '');
   const [note, setNote] = useState(item?.note ?? '');
   const [due, setDue] = useState(() => localDateInput(item?.dueAt ?? null));
+  const [reminderMinutes, setReminderMinutes] = useState<number | null>(item?.reminderMinutes ?? 0);
+  const [repeat, setRepeat] = useState<RepeatMode | 'none'>(item?.recurrence?.mode ?? 'none');
+  const [days, setDays] = useState<number[]>(item?.recurrence?.weekdays ?? [new Date(item?.dueAt ?? Date.now()).getDay()]);
+  const timeZone = item?.recurrence?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -27,13 +33,18 @@ export function ReminderForm({ item, onClose, onSaved }: { item?: Task; onClose:
     let schedule;
     try {
       if (!due) throw new Error('Укажите дату и время напоминания.');
-      schedule = parseSchedule(due, 0);
+      schedule = parseSchedule(due, reminderMinutes ?? 0);
+      if (repeat === 'weekdays' && days.length === 0) throw new Error('Выберите хотя бы один день недели.');
+      schedule.recurrence = repeat === 'none' ? null : { mode: repeat, timeZone, weekdays: repeat === 'weekdays' ? [...days].sort((a, b) => a - b) : [] };
       if (item && due === localDateInput(item.dueAt)) { schedule.dueAt = item.dueAt; schedule.dueOffsetMinutes = item.dueOffsetMinutes; }
-      if (!uncertain && (!item || schedule.dueAt !== item.dueAt) && schedule.dueAt! <= Date.now()) throw new Error('Время уже прошло. Выберите будущие дату и время.');
+      const changed = !item || schedule.dueAt !== item.dueAt || schedule.reminderMinutes !== item.reminderMinutes
+        || repeat !== (item.recurrence?.mode ?? 'none') || JSON.stringify(schedule.recurrence?.weekdays ?? []) !== JSON.stringify(item.recurrence?.weekdays ?? []);
+      if (!uncertain && changed && schedule.dueAt! - (schedule.reminderMinutes ?? 0) * 60000 <= Date.now()) throw new Error('Время уведомления уже прошло. Выберите более позднюю дату или меньший интервал.');
     } catch (cause) { setError((cause as Error).message); return; }
     lock.current = true; setBusy(true); setError('');
     try {
-      if (!uncertain && (!item || schedule.dueAt !== item.dueAt)) await requestReminderPermission();
+      if (!uncertain && (!item || schedule.dueAt !== item.dueAt || schedule.reminderMinutes !== item.reminderMinutes
+        || repeat !== (item.recurrence?.mode ?? 'none') || JSON.stringify(schedule.recurrence?.weekdays ?? []) !== JSON.stringify(item.recurrence?.weekdays ?? []))) await requestReminderPermission();
       const result = item ? await api.updateReminder(item.id, { title: title.trim(), note: note.trim(), ...schedule })
         : await api.createReminder({ title: title.trim(), note: note.trim(), requestId: requestId.current, ...schedule });
       haptic('success'); onSaved(result.task);
@@ -51,7 +62,9 @@ export function ReminderForm({ item, onClose, onSaved }: { item?: Task; onClose:
         <label htmlFor="reminder-note">Детали <span className="optional">необязательно</span></label>
         <textarea id="reminder-note" rows={2} maxLength={1000} value={note} onChange={event => setNote(event.target.value)} placeholder="Что хочется вспомнить…" />
         <div className="input-caption"><span /><span>{note.length}/1000</span></div>
-        <DateTimePicker label="Когда напомнить" value={due} onChange={setDue} optional={false} />
+        <DateTimePicker label="Дата и время события" value={due} onChange={setDue} optional={false} />
+        <ReminderTiming value={reminderMinutes} onChange={setReminderMinutes} available={capabilities === 'enabled'} />
+        <RepeatFields mode={repeat} onModeChange={setRepeat} days={days} onDaysChange={setDays} timeZone={timeZone} />
       </fieldset>
       <div className="reminder-delivery-note"><Icon name="telegram" size={18} /><p>{capabilities === 'disabled' ? 'Автоматическая отправка сейчас приостановлена.'
         : capabilities === 'error' ? 'Не удалось проверить доступность отправки. Попробуйте ещё раз.'

@@ -1,6 +1,7 @@
 import { api, EndpointError, BotApiError } from 'sdk';
 import { positiveId } from './tasks.js';
 import { listUserTasks, taskCounts, getUserTask } from './task-service.js';
+import { recurrenceLabel, zoneOffset } from './recurrence.js';
 
 export const APP_URL = 'https://app8347651382.tgcloud.ai/';
 export const BOT_USERNAME = 'SyToDoBot';
@@ -126,7 +127,11 @@ export async function confirmDelete(userId, id) {
 export async function reminderList(userId, status = 'active', cursor) {
   const page = await listUserTasks(userId, { status, cursor }, 5, 'reminder');
   const headings = { active: 'Предстоящие напоминания', completed: 'Отправленные напоминания', all: 'Все напоминания' };
-  const lines = page.tasks.map(item => `<b>${html(item.title)}</b>\n${formatDeadline(item)}\n№<code>${item.id}</code> · ${item.reminderSentAt !== null ? 'Отправлено' : item.reminderAt === null ? 'Отправка приостановлена' : 'Запланировано'}`);
+  const lines = page.tasks.map(item => {
+    const date = status === 'completed' && item.lastReminderDueAt !== null ? item.lastReminderDueAt : item.dueAt;
+    const dateItem = { ...item, dueAt: date, dueOffsetMinutes: item.recurrence ? zoneOffset(date, item.recurrence.timeZone) : item.dueOffsetMinutes };
+    return `<b>${html(item.title)}</b>\n${formatDeadline(dateItem)}\n№<code>${item.id}</code> · ${status === 'completed' ? 'Отправлено' : item.reminderAt === null ? 'Отправка приостановлена' : 'Запланировано'}${item.recurrence ? `\nПовтор: ${recurrenceLabel(item.recurrence)}` : ''}${item.reminderMinutes > 0 ? `\nУведомление за ${item.reminderMinutes} мин.` : ''}${status === 'completed' && item.recurrence && item.reminderAt !== null ? `\nСледующий раз: ${formatDeadline(item)}` : ''}`;
+  });
   const keyboard = page.tasks.map(item => [appButton(`Изменить №${item.id}`, `?view=reminders&edit=${item.id}`),
     { text: `Удалить №${item.id}`, callback_data: `reminder:ask_delete:${item.id}` }]);
   if (page.nextCursor) keyboard.push([{ text: 'Следующие 5 →', callback_data: `reminders:${status}:${page.nextCursor}` }]);

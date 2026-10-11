@@ -5,6 +5,7 @@ import { ReminderForm } from './ReminderForm';
 import { Sheet } from './Sheet';
 import { Icon } from './icons';
 import { deadlineFormat } from './schedule';
+import { repeatLabel } from './RepeatFields';
 import { haptic } from './useTelegram';
 import type { Task } from './types';
 
@@ -31,12 +32,17 @@ export function RemindersPanel() {
     lock.current = true; setPending(item.id); setWriteError('');
     try {
       if (remove) { await api.deleteReminder(item.id); applyWrite(item, true); setDeleting(null); }
-      else { const result = await api.snoozeReminder(item.id); applyWrite(result.task); selectStatus('active'); }
+      else { const result = await api.snoozeReminder(item.id, item.lastReminderDueAt ?? undefined); applyWrite(result.task); selectStatus('active'); }
       haptic('success'); await refresh();
     } catch (cause) { setWriteError(errorMessage(cause)); haptic('error'); }
     finally { lock.current = false; setPending(null); }
   }
-  const saved = (item: Task) => { applyWrite(item, false, editing ?? undefined); setCreating(false); setEditing(null); void refresh(); };
+  const closeForm = () => {
+    setCreating(false); setEditing(null);
+    const url = new URL(location.href); url.searchParams.delete('action'); url.searchParams.delete('edit');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  };
+  const saved = (item: Task) => { applyWrite(item, false, editing ?? undefined); closeForm(); void refresh(); };
   return <section className="tasks-panel reminders-panel" aria-labelledby="reminders-heading">
     <div className="tasks-heading"><div><span className="eyebrow">ВОВРЕМЯ О ВАЖНОМ</span><h2 id="reminders-heading">Мои напоминания</h2></div>
       <button className="button primary add-task" disabled={availability() !== 'ready' || pending !== null} onClick={() => { setWriteError(''); setCreating(true); }}><Icon name="plus" /><span>Новое напоминание</span></button></div>
@@ -54,10 +60,13 @@ export function RemindersPanel() {
           <h3>{status === 'completed' ? 'История ещё пуста' : 'Важное не потеряется'}</h3><p>{status === 'completed' ? 'Здесь появятся отправленные напоминания.' : 'Выберите дату и время — мы напомним в Telegram.'}</p>
           {status !== 'completed' && <button className="button secondary" onClick={() => setCreating(true)}>Создать напоминание</button>}</div>
         : page ? <><ul className="task-list">{page.tasks.map(item => <li key={item.id} className={`task-card reminder-card ${pending === item.id ? 'is-busy' : ''}`}>
-          <div className="reminder-mark">{pending === item.id ? <span className="spinner" /> : <Icon name={item.reminderSentAt === null ? 'bell' : 'check'} size={20} />}</div>
+          <div className="reminder-mark">{pending === item.id ? <span className="spinner" /> : <Icon name={status === 'completed' ? 'check' : 'bell'} size={20} />}</div>
           <div className="task-content"><h3>{item.title}</h3>{item.note && <p className="task-note">{item.note}</p>}
-            <div className="task-deadline"><Icon name="calendar" size={14} /><span>{item.dueAt === null ? 'Срок не указан' : deadlineFormat.format(item.dueAt)}</span></div>
-            <div className="task-meta"><span className="priority-badge">{item.reminderSentAt !== null ? 'Отправлено' : item.reminderAt === null ? 'Отправка приостановлена' : item.reminderAt <= Date.now() ? 'Ожидает отправки' : 'Запланировано'}</span></div>
+            <div className="task-deadline"><Icon name="calendar" size={14} /><span>{item.dueAt === null ? 'Срок не указан' : deadlineFormat.format(status === 'completed' ? item.lastReminderDueAt ?? item.dueAt : item.dueAt)}</span></div>
+            <div className="task-meta"><span className="priority-badge">{status === 'completed' ? 'Отправлено' : item.reminderAt === null ? 'Отправка приостановлена' : item.reminderAt <= Date.now() ? 'Ожидает отправки' : 'Запланировано'}</span>
+              {item.recurrence && <span className="priority-badge">{repeatLabel(item.recurrence)}</span>}</div>
+            {item.reminderMinutes !== null && item.reminderMinutes > 0 && <p className="reminder-hint">Уведомление за {item.reminderMinutes} мин.</p>}
+            {status === 'completed' && item.recurrence && item.reminderAt !== null && <p className="reminder-hint">Следующий раз: {deadlineFormat.format(item.dueAt!)}</p>}
             {item.reminderSentAt !== null && <button className="text-button snooze-button" disabled={blocked} onClick={() => void write(item)}><Icon name="clock" size={14} />Ещё раз через 10 минут</button>}
           </div>
           <div className="task-actions"><button className="icon-button" aria-label={`Изменить напоминание: ${item.title}`} disabled={blocked} onClick={() => { setWriteError(''); setEditing(item); }}><Icon name="calendar" size={18} /></button>
@@ -66,7 +75,7 @@ export function RemindersPanel() {
         : <div className="empty-state"><p>Не удалось загрузить напоминания.</p><button className="button secondary" onClick={() => void refresh()}>Повторить</button></div>}
     </div>
     <div className="list-footer"><Icon name="shield" size={16} /><span>Личные напоминания в Telegram</span></div>
-    {(creating || editing) && <ReminderForm item={editing ?? undefined} onClose={() => { setCreating(false); setEditing(null); }} onSaved={saved} />}
+    {(creating || editing) && <ReminderForm item={editing ?? undefined} onClose={closeForm} onSaved={saved} />}
     {deleting && <Sheet title="Удалить напоминание?" subtitle="Ожидающая отправка будет отменена." onClose={() => setDeleting(null)} busy={pending !== null}>
       <div className="delete-preview"><Icon name="bell" /><p>{deleting.title}</p></div>
       {writeError && <div className="form-error" role="alert">{writeError}</div>}

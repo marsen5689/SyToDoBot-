@@ -27,7 +27,7 @@ test('additive schedule migration preserves existing tasks and supplies neutral 
   const before = db.prepare('SELECT * FROM tasks').get();
   for (const declaration of ['due_at INTEGER', 'due_offset_minutes INTEGER NOT NULL DEFAULT 0',
     'reminder_minutes INTEGER', 'reminder_at INTEGER', 'reminder_sent_at INTEGER', 'reminder_lease_until INTEGER',
-    'schedule_version INTEGER NOT NULL DEFAULT 0']) db.exec('ALTER TABLE tasks ADD COLUMN ' + declaration);
+    'schedule_version INTEGER NOT NULL DEFAULT 0', 'recurrence TEXT', 'last_reminder_due_at INTEGER']) db.exec('ALTER TABLE tasks ADD COLUMN ' + declaration);
   const after = db.prepare('SELECT * FROM tasks').get();
   assert.deepEqual(Object.fromEntries(Object.keys(before).map(key => [key, after[key]])), { ...before });
   assert.equal(after.due_at, null); assert.equal(after.schedule_version, 0);
@@ -73,7 +73,7 @@ test('date, time zone and reminder settings are validated server-side', async ()
     for (const offset of ['180', 841, -841, 15.5]) {
       await assert.rejects(app.endpoints.createTask({ ...request('zone', START), dueOffsetMinutes: offset }, user(101)), code('VALIDATION_ERROR'));
     }
-    for (const minutes of [-1, '15', 10, 15.5, true]) {
+    for (const minutes of [-1, '15', 10081, 15.5, true]) {
       await assert.rejects(app.endpoints.createTask({ ...request('interval', START + 3600000), reminderMinutes: minutes }, user(101)), code('VALIDATION_ERROR'));
     }
     await assert.rejects(app.endpoints.createTask(request('missing-date', null, 15), user(101)), code('VALIDATION_ERROR'));

@@ -1,13 +1,14 @@
 import { db, EndpointError } from 'sdk';
-import { eq, and, lt, desc, sql, isNull, isNotNull } from 'sdk/db';
+import { eq, and, or, like, lt, desc, sql } from 'sdk/db';
 import { tasks } from '../schema.js';
-import { objectInput, positiveId, createInput, scheduleInput, validateNewReminder, taskColumns, ownedTask, recordScope, notFound } from './tasks.js';
+import { objectInput, positiveId, createInput, scheduleInput, validateNewReminder, taskColumns, ownedTask, recordScope, reminderStatus, notFound } from './tasks.js';
+import { recurringSchedule } from './recurrence.js';
 
 // Callers must supply identity from verified endpoint context or a Telegram update.
 export async function taskCounts(userId, kind = 'task') {
   positiveId(userId, 'user');
-  const active = await db.$count(tasks, and(recordScope(userId, kind), kind === 'reminder' ? isNull(tasks.reminderSentAt) : eq(tasks.completed, false)));
-  const completed = await db.$count(tasks, and(recordScope(userId, kind), kind === 'reminder' ? isNotNull(tasks.reminderSentAt) : eq(tasks.completed, true)));
+  const active = await db.$count(tasks, and(recordScope(userId, kind), kind === 'reminder' ? reminderStatus('active') : eq(tasks.completed, false)));
+  const completed = await db.$count(tasks, and(recordScope(userId, kind), kind === 'reminder' ? reminderStatus('completed') : eq(tasks.completed, true)));
   return { active, completed };
 }
 
@@ -20,7 +21,7 @@ export async function listUserTasks(userId, input, pageSize = 30, kind = 'task')
   }
   const conditions = [recordScope(userId, kind)];
   if (status !== 'all') conditions.push(kind === 'reminder'
-    ? status === 'completed' ? isNotNull(tasks.reminderSentAt) : isNull(tasks.reminderSentAt)
+    ? reminderStatus(status)
     : eq(tasks.completed, status === 'completed'));
   if (input.cursor !== undefined && input.cursor !== null) conditions.push(lt(tasks.id, positiveId(input.cursor, 'cursor')));
   const rows = await db.select(taskColumns).from(tasks)
@@ -40,17 +41,18 @@ export async function getUserTask(userId, id, kind = 'task') {
 
 export async function createUserTask(userId, input, kind = 'task') {
   positiveId(userId, 'user');
-  const { title, note, priority, requestId, ...schedule } = createInput(input);
+  const { title, note, priority, requestId, ...rawSchedule } = createInput(input);
   const requestKey = `${kind === 'reminder' ? 'reminder:' : ''}${userId}:${requestId}`;
   const now = Date.now();
   const existing = await db.select(taskColumns).from(tasks)
     .where(and(eq(tasks.userId, userId), eq(tasks.requestKey, requestKey))).get();
   // A retry remains valid even after the original reminder time has passed.
   if (existing) return { task: existing };
+  const schedule = kind === 'reminder' ? recurringSchedule(rawSchedule, input.recurrence) : { ...rawSchedule, recurrence: null };
   validateNewReminder(schedule, now);
   const [inserted] = await db.insert(tasks).values({
     userId, requestKey, title, note, priority, ...schedule, reminderSentAt: null, reminderLeaseUntil: null,
-    scheduleVersion: 0, completed: false, createdAt: now, updatedAt: now,
+    lastReminderDueAt: null, scheduleVersion: 0, completed: false, createdAt: now, updatedAt: now,
   }).onConflictDoNothing({ target: tasks.requestKey }).returning(taskColumns).run();
   const task = inserted ?? await db.select(taskColumns).from(tasks)
     .where(and(eq(tasks.userId, userId), eq(tasks.requestKey, requestKey))).get();
@@ -79,7 +81,11 @@ export async function deleteUserTask(userId, input, kind = 'task') {
   positiveId(userId, 'user');
   objectInput(input);
   const id = positiveId(input.id);
-  const [deleted] = await db.delete(tasks).where(ownedTask(userId, id, kind)).returning({ id: tasks.id }).run();
+  if (kind === 'reminder') await getUserTask(userId, id, kind);
+  const deletedRows = await db.delete(tasks).where(kind === 'reminder'
+    ? and(recordScope(userId, kind), or(eq(tasks.id, id), like(tasks.requestKey, `reminder:${userId}:snooze:${id}:%`)))
+    : ownedTask(userId, id, kind)).returning({ id: tasks.id }).run();
+  const deleted = deletedRows.find(row => row.id === id);
   if (!deleted) notFound();
   return { id: deleted.id };
 }
@@ -99,7 +105,7 @@ export async function setUserSchedule(userId, input) {
   const now = Date.now();
   validateNewReminder(schedule, now);
   const [task] = await db.update(tasks).set({ ...schedule, updatedAt: now,
-    reminderSentAt: null, reminderLeaseUntil: null, scheduleVersion: sql`${tasks.scheduleVersion} + 1`,
+    reminderSentAt: null, lastReminderDueAt: null, reminderLeaseUntil: null, scheduleVersion: sql`${tasks.scheduleVersion} + 1`,
   })
     .where(ownedTask(userId, id)).returning(taskColumns).run();
   if (!task) notFound();

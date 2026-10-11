@@ -49,7 +49,7 @@ function TaskRow({ task, busy, disabled, now, onComplete, onDelete, onSchedule }
       {task.reminderMinutes !== null && !task.completed && <div className="task-reminder"><Icon name="bell" size={14} /><span>
         {task.reminderSentAt !== null ? 'Напоминание отправлено' : task.reminderAt === null ? 'Напоминание отключено'
           : task.reminderMinutes === 0 ? 'Напомнить в дедлайн' : task.reminderMinutes === 15 ? 'Напомнить за 15 минут'
-          : task.reminderMinutes === 60 ? 'Напомнить за час' : 'Напомнить за день'}
+          : task.reminderMinutes === 60 ? 'Напомнить за час' : task.reminderMinutes === 1440 ? 'Напомнить за день' : `Напомнить за ${task.reminderMinutes} минут`}
       </span></div>}
       <div className="task-meta"><span className={`priority-badge ${task.priority}`}><span className="priority-dot" />{priorityLabels[task.priority]}</span>
         <span className="task-date"><Icon name="clock" size={12} />{dateFormat.format(new Date(task.createdAt))}</span>

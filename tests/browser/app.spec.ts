@@ -172,7 +172,8 @@ test('enabled reminders require write permission, save the interval and can be c
     await page.getByLabel('Что нужно сделать?').fill('Задача с напоминанием');
     await pickDateTime(page, '2030-03-10T15:30');
     await expect(page.getByLabel('Напоминание в Telegram')).toBeEnabled();
-    await page.getByLabel('Напоминание в Telegram').selectOption('15');
+    await page.getByLabel('Напоминание в Telegram').selectOption('custom');
+    await page.getByLabel('За сколько минут?').fill('37');
     await page.getByRole('button', { name: 'Создать задачу' }).click();
     await expect(page.getByRole('alert')).toContainText('Разрешите сообщения бота');
     expect((await app.endpoints.listTasks({}, { initData: { user: { id: 101 } } })).tasks).toHaveLength(0);
@@ -180,9 +181,9 @@ test('enabled reminders require write permission, save the interval and can be c
     await page.evaluate(() => { (window as any).allowReminderMessages = true; });
     await page.getByRole('button', { name: 'Создать задачу' }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible();
-    await expect(page.getByText('Напомнить за 15 минут')).toBeVisible();
+    await expect(page.getByText('Напомнить за 37 минут')).toBeVisible();
     const saved = (await app.endpoints.listTasks({}, { initData: { user: { id: 101 } } })).tasks[0];
-    expect(saved.reminderAt).toBe(saved.dueAt - 15 * 60000);
+    expect(saved.reminderAt).toBe(saved.dueAt - 37 * 60000);
     await page.getByRole('button', { name: 'Настроить срок: Задача с напоминанием' }).click();
     await page.getByLabel('Напоминание в Telegram').selectOption('off');
     await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
@@ -228,13 +229,13 @@ for (const theme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Новое напоминание', exact: true }).click();
       await page.getByLabel('О чём напомнить?').fill('Позвонить родителям');
       await page.getByLabel('Детали', { exact: false }).fill('Рассказать хорошие новости');
-      await page.getByRole('button', { name: /^Когда напомнить:/ }).click();
+      await page.getByRole('button', { name: /^Дата и время события:/ }).click();
       await page.getByRole('button', { name: 'Завтра', exact: true }).click();
       const tomorrow = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
       await expect(page.getByRole('button', { name: tomorrow, exact: true })).toHaveAttribute('aria-pressed', 'true');
       await page.getByRole('button', { name: 'Готово', exact: true }).click();
-      await pickDateTime(page, '2030-03-10T15:30', 'Когда напомнить');
-      await page.getByRole('button', { name: /^Когда напомнить:/ }).click();
+      await pickDateTime(page, '2030-03-10T15:30', 'Дата и время события');
+      await page.getByRole('button', { name: /^Дата и время события:/ }).click();
       const minutes = page.getByRole('listbox', { name: 'Минуты', exact: true });
       await minutes.scrollIntoViewIfNeeded();
       const bounds = (await minutes.boundingBox())!;

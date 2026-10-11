@@ -1,14 +1,19 @@
 export type Priority = 'low' | 'normal' | 'high';
 export type TaskStatus = 'active' | 'completed' | 'all';
+export type RepeatMode = 'daily' | 'alternate' | 'weekdays';
+export interface RecurrenceInput { mode: RepeatMode; timeZone: string; weekdays?: number[] }
+export interface RecurrenceRule extends RecurrenceInput { anchorDate: string; minuteOfDay: number; weekdays: number[] }
 export interface Task {
   id: number; title: string; note: string; priority: Priority;
   completed: boolean; createdAt: number; updatedAt: number;
   dueAt: number | null; dueOffsetMinutes: number;
   reminderMinutes: number | null; reminderAt: number | null; reminderSentAt: number | null;
+  recurrence: RecurrenceRule | null; lastReminderDueAt: number | null;
 }
 export interface TaskSchedule {
   dueAt: number | null; dueOffsetMinutes: number;
   reminderMinutes: number | null;
+  recurrence?: RecurrenceInput | null;
 }
 export interface Profile {
   id: number; first_name: string; last_name: string; username: string; photo_url: string;

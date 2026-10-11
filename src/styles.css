@@ -142,9 +142,9 @@ h1 { margin: 12px 0; font-size: 30px; line-height: 1.2; letter-spacing: -.05em; 
 .schedule-fields .input-caption { align-items: center; margin-bottom: 16px; }
 .reminder-hint { font-size: 12px; color: var(--color-mid-gray); margin-top: 8px; line-height: 1.5; }
 .task-reminder { display: flex; align-items: center; gap: 8px; color: var(--color-mid-gray); font-size: 12px; margin-top: 8px; }
-.schedule-fields select { display: block; width: 100%; min-height: 48px; padding: 12px; color: var(--color-ink); background: var(--color-input); border: 1px solid transparent; border-radius: var(--radius-controls); font-size: 16px; }
-.schedule-fields select:focus-visible { outline: 1px solid var(--color-hairline); outline-offset: 0; }
-.schedule-fields select:disabled { opacity: .6; }
+.schedule-fields select, .reminder-timing select, .repeat-fields select { display: block; width: 100%; min-height: 48px; padding: 12px; color: var(--color-ink); background: var(--color-input); border: 1px solid transparent; border-radius: var(--radius-controls); font-size: 16px; }
+.schedule-fields select:focus-visible, .reminder-timing select:focus-visible, .repeat-fields select:focus-visible { outline: 1px solid var(--color-hairline); outline-offset: 0; }
+.schedule-fields select:disabled, .reminder-timing select:disabled, .repeat-fields select:disabled { opacity: .6; }
 .is-busy { opacity: .7; }
 .load-more { width: 100%; margin-top: 16px; background: var(--color-input); }
 .empty-state, .launch-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 36px 4px; }
@@ -208,6 +208,12 @@ fieldset:disabled .priority-option { cursor: default; opacity: .6; }
 .section-navigation { display: flex; gap: 4px; width: fit-content; padding: 4px; margin: 0 0 24px; border: 1px solid var(--color-hairline); border-radius: var(--radius-controls); background: var(--color-paper); }
 .section-navigation button { display: inline-flex; gap: 8px; align-items: center; min-height: 44px; padding: 8px 16px; border: 0; border-radius: var(--radius-controls); background: transparent; color: var(--color-mid-gray); font-size: 14px; font-weight: 500; }
 .section-navigation button.selected { color: var(--color-on-primary); background: var(--color-ink); }
+.reminder-timing, .repeat-fields { margin-bottom: 20px; }
+.reminder-timing > label, .repeat-fields > label, .custom-reminder > label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; }
+.custom-reminder { margin-top: 12px; }
+.weekday-options { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 12px; }
+.weekday-options button { min-width: 0; min-height: 44px; padding: 4px 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-controls); color: var(--color-ink); background: var(--color-input); font-size: 14px; font-weight: 500; }
+.weekday-options button.selected { border-color: var(--color-ink); color: var(--color-on-primary); background: var(--color-ink); }
 .datetime-field { margin-bottom: 20px; }
 .datetime-trigger { width: 100%; display: flex; gap: 10px; align-items: center; min-height: 52px; text-align: left; padding: 12px; border: 1px solid transparent; border-radius: var(--radius-controls); color: var(--color-mid-gray); background: var(--color-input); font-size: 14px; }
 .datetime-trigger span { flex: 1; min-width: 0; }

@@ -18,7 +18,7 @@ export default async function callbackQuery(input) {
     const list = /^list:(active|completed|all)(?::([1-9]\d{0,15}))?$/.exec(data);
     const task = /^task:(done|undo|ask_delete|delete):([1-9]\d{0,15})$/.exec(data);
     const reminders = /^reminders:(active|completed|all)(?::([1-9]\d{0,15}))?$/.exec(data);
-    const reminder = /^reminder:(snooze|ask_delete|delete):([1-9]\d{0,15})$/.exec(data);
+    const reminder = /^reminder:(snooze|ask_delete|delete):([1-9]\d{0,15})(?::([1-9]\d{0,15}))?$/.exec(data);
     if (data === 'home') view = home(user);
     else if (data === 'cancel') view = { ...home(user), text: 'Удаление отменено. Задача осталась в вашем списке.' };
     else if (data === 'help') view = help();
@@ -33,7 +33,7 @@ export default async function callbackQuery(input) {
         await deleteUserTask(user.id, { id }, 'reminder');
         view = { ...(await reminderList(user.id)), text: 'Напоминание удалено. Ожидающая отправка отменена.' };
       } else {
-        const { task: item } = await snoozeUserReminder(user.id, { id });
+        const { task: item } = await snoozeUserReminder(user.id, { id, ...(reminder[3] ? { occurrenceAt: commandId(reminder[3]) } : {}) });
         view = { text: `Напоминание перенесено: ${formatDeadline(item)}.`, reply_markup: { inline_keyboard: [[{ text: 'Мои напоминания', callback_data: 'reminders:active' }]] } };
       }
     }

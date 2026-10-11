@@ -71,10 +71,14 @@ export function useTasks(kind: 'task' | 'reminder' = 'task') {
     if (!current) return;
     const old = current.tasks.find((item) => item.id === task.id) ?? previous;
     const counts = { ...current.counts };
-    const isDone = (item: Task) => kind === 'reminder' ? item.reminderSentAt !== null : item.completed;
-    if (old) counts[isDone(old) ? 'completed' : 'active']--;
-    if (!deleted) counts[isDone(task) ? 'completed' : 'active']++;
-    const visible = !deleted && (statusRef.current === 'all' || isDone(task) === (statusRef.current === 'completed'));
+    const matches = (item: Task, filter: TaskStatus) => filter === 'all' || (kind === 'reminder'
+      ? filter === 'completed' ? item.reminderSentAt !== null : item.reminderSentAt === null || (!!item.recurrence && item.reminderAt !== null)
+      : item.completed === (filter === 'completed'));
+    for (const filter of ['active', 'completed'] as const) {
+      if (old && matches(old, filter)) counts[filter]--;
+      if (!deleted && matches(task, filter)) counts[filter]++;
+    }
+    const visible = !deleted && matches(task, statusRef.current);
     const items = current.tasks.filter((item) => item.id !== task.id);
     if (visible) items.push(task);
     const next = { ...current, counts, tasks: items.sort((a, b) => b.id - a.id) };

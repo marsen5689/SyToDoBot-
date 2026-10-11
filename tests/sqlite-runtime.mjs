@@ -28,6 +28,7 @@ const sql = (strings, ...values) => {
 const operators = {
   integer: (name) => column('INTEGER', name),
   text: (name) => column('TEXT', name),
+  json: (name) => column('JSON', name),
   boolean: (name) => column('BOOLEAN', name),
   eq: binary('='), lt: binary('<'), lte: binary('<='),
   like: binary('LIKE'), notLike: binary('NOT LIKE'),
@@ -50,7 +51,7 @@ export async function runtime(filename = ':memory:', options = {}) {
     table(name, columns, extras) {
       const table = { tableName: name, columns, ...columns };
       const constraints = extras?.(table) ?? {};
-      const definitions = Object.values(columns).map((col) => `${quote(col.name)} ${col.type === 'BOOLEAN' ? 'INTEGER' : col.type}${col.primary ? ' PRIMARY KEY AUTOINCREMENT' : ''}${col.required ? ' NOT NULL' : ''}${col.isUnique ? ' UNIQUE' : ''}${col.defaultValue === undefined ? '' : ` DEFAULT ${typeof col.defaultValue === 'string' ? `'${col.defaultValue.replaceAll("'", "''")}'` : typeof col.defaultValue === 'boolean' ? Number(col.defaultValue) : col.defaultValue}`}`);
+      const definitions = Object.values(columns).map((col) => `${quote(col.name)} ${col.type === 'BOOLEAN' ? 'INTEGER' : col.type === 'JSON' ? 'TEXT' : col.type}${col.primary ? ' PRIMARY KEY AUTOINCREMENT' : ''}${col.required ? ' NOT NULL' : ''}${col.isUnique ? ' UNIQUE' : ''}${col.defaultValue === undefined ? '' : ` DEFAULT ${typeof col.defaultValue === 'string' ? `'${col.defaultValue.replaceAll("'", "''")}'` : typeof col.defaultValue === 'boolean' ? Number(col.defaultValue) : col.defaultValue}`}`);
       for (const extra of Object.values(constraints)) if (extra.check) definitions.push(`CHECK (${extra.check.text})`);
       sqlite.exec(`CREATE TABLE IF NOT EXISTS ${quote(name)} (${definitions.join(', ')})`);
       for (const extra of Object.values(constraints)) if (extra.index) sqlite.exec(`CREATE INDEX IF NOT EXISTS ${quote(extra.name)} ON ${quote(name)} (${extra.columns.map((col) => quote(col.name)).join(', ')})`);
@@ -62,19 +63,20 @@ export async function runtime(filename = ':memory:', options = {}) {
   function builder(kind, table, projection) {
     let values, condition, order, limit, returning, conflict;
     const project = (selected) => Object.entries(selected ?? table.columns).map(([key, col]) => `${quote(col.name)} AS ${quote(key)}`).join(', ');
-    const convert = (row, selected) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, (selected ?? table.columns)[key]?.type === 'BOOLEAN' ? Boolean(value) : value]));
+    const convert = (row, selected) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, (selected ?? table.columns)[key]?.type === 'BOOLEAN' ? Boolean(value) : (selected ?? table.columns)[key]?.type === 'JSON' && value !== null ? JSON.parse(value) : value]));
+    const encode = (key, value) => table[key]?.type === 'JSON' && value !== null && !value?.text ? JSON.stringify(value) : value;
     function execute() {
       let query, params = [];
       if (kind === 'select') query = `SELECT ${project(projection)} FROM ${quote(table.tableName)}`;
       if (kind === 'insert') {
         const entries = Object.entries(values);
         query = `INSERT INTO ${quote(table.tableName)} (${entries.map(([key]) => quote(table[key].name)).join(', ')}) VALUES (${entries.map(() => '?').join(', ')})`;
-        params = entries.map(([, value]) => typeof value === 'boolean' ? Number(value) : value);
+        params = entries.map(([key, value]) => typeof value === 'boolean' ? Number(value) : encode(key, value));
         if (conflict) query += ` ON CONFLICT (${quote(conflict.name)}) DO NOTHING`;
       }
       if (kind === 'update') {
         const entries = Object.entries(values);
-        const parts = entries.map(([key, value]) => ({ key, expr: expression(value) }));
+        const parts = entries.map(([key, value]) => ({ key, expr: expression(encode(key, value)) }));
         query = `UPDATE ${quote(table.tableName)} SET ${parts.map(({ key, expr }) => `${quote(table[key].name)} = ${expr.text}`).join(', ')}`;
         params = parts.flatMap(({ expr }) => expr.params);
       }
@@ -104,6 +106,10 @@ export async function runtime(filename = ':memory:', options = {}) {
     return chain;
   }
   const db = {
+    async run(query) {
+      const result = sqlite.prepare(query.text).run(...query.params);
+      return { rowsAffected: result.changes, lastInsertRowid: result.lastInsertRowid, rows: [] };
+    },
     select: (projection) => builder('select', null, projection),
     insert: (table) => builder('insert', table),
     update: (table) => builder('update', table),

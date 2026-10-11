@@ -8,6 +8,9 @@ export function localDateInput(timestamp: number | null): string {
 }
 
 export function parseSchedule(value: string, reminderMinutes: number | null = null): TaskSchedule {
+  if (reminderMinutes !== null && (!Number.isSafeInteger(reminderMinutes) || reminderMinutes < 0 || reminderMinutes > 10080)) {
+    throw new Error('Укажите целое число минут от 0 до 10 080.');
+  }
   if (!value) {
     if (reminderMinutes !== null) throw new Error('Для напоминания укажите дедлайн.');
     return { dueAt: null, dueOffsetMinutes: 0, reminderMinutes: null };

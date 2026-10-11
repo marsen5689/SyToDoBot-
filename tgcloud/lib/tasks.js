@@ -1,5 +1,5 @@
 import { EndpointError } from 'sdk';
-import { eq, and, like, notLike } from 'sdk/db';
+import { eq, and, or, isNull, isNotNull, like, notLike } from 'sdk/db';
 import { tasks } from '../schema.js';
 import { remindersEnabled } from './reminder-config.js';
 
@@ -9,7 +9,13 @@ export const taskColumns = {
   completed: tasks.completed, createdAt: tasks.createdAt, updatedAt: tasks.updatedAt,
   dueAt: tasks.dueAt, dueOffsetMinutes: tasks.dueOffsetMinutes,
   reminderMinutes: tasks.reminderMinutes, reminderAt: tasks.reminderAt, reminderSentAt: tasks.reminderSentAt,
+  recurrence: tasks.recurrence, lastReminderDueAt: tasks.lastReminderDueAt,
 };
+
+export function reminderStatus(status) {
+  return status === 'completed' ? isNotNull(tasks.reminderSentAt)
+    : or(isNull(tasks.reminderSentAt), and(isNotNull(tasks.recurrence), isNotNull(tasks.reminderAt)));
+}
 
 export function currentUser(ctx) {
   const user = ctx?.initData?.user;
@@ -82,8 +88,8 @@ export function scheduleInput(input) {
     throw new EndpointError('Некорректный часовой пояс.', { code: 'VALIDATION_ERROR', field: 'dueAt' });
   }
   const reminderMinutes = input.reminderMinutes ?? null;
-  if (reminderMinutes !== null && (!Number.isSafeInteger(reminderMinutes) || ![0, 15, 60, 1440].includes(reminderMinutes) || dueAt === null)) {
-    throw new EndpointError('Укажите дедлайн и выберите время напоминания.', { code: 'VALIDATION_ERROR', field: 'reminderMinutes' });
+  if (reminderMinutes !== null && (!Number.isSafeInteger(reminderMinutes) || reminderMinutes < 0 || reminderMinutes > 10080 || dueAt === null)) {
+    throw new EndpointError('Укажите дату и целое число минут от 0 до 10080 (7 дней).', { code: 'VALIDATION_ERROR', field: 'reminderMinutes' });
   }
   return { dueAt, dueOffsetMinutes, reminderMinutes, reminderAt: reminderMinutes === null ? null : dueAt - reminderMinutes * 60000 };
 }
