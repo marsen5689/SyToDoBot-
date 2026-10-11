@@ -150,3 +150,17 @@ processReminders с maintenanceJob только в input и обычным ко�
 EndpointError FORBIDDEN. Публичные getReminderCapabilities и processReminders
 без initData, в том числе с подставленным ctx в JSON body, вернули HTTP 401.
 CLI status подтвердил синхронизацию revision 4, webhook и 9 статических файлов.
+
+Пользователь создал настоящую задачу с ближайшим дедлайном. После наступления
+срока GitHub Actions run
+https://github.com/marsen5689/SyToDoBot-/actions/runs/38124022337 завершился success:
+processReminders вернул enabled:true, sent:1, failed:0, skipped:0 (97 ms).
+Пользователь подтвердил «Да, пришло». Повторный npm run reminders через
+официальный CLI вернул sent:0, failed:0, skipped:0 (7 ms): повторной отправки нет.
+Тестовые записи вместо пользовательской задачи не создавались; идентификатор
+получателя взят из настоящей записи tasks серверным worker.
+
+Проверенные GitHub runs имели event workflow_dispatch. Состояние workflow active,
+default_branch main, cron 2-59/5 * * * * подтверждены. Первый event schedule
+на момент проверки ещё не наблюдался; отправка по расписанию использует тот же
+runner, время и возможные задержки запуска определяет GitHub Actions.

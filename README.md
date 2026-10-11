@@ -297,10 +297,13 @@ CLI Access хранится в Repository Actions secret `TGCLOUD_TOKEN`; runner
 `tgcloud/lib/reminder-config.js` содержит `remindersEnabled=true`.
 
 Доступ из GitHub проверен запуском `verify_only=true`, который вызывает только
-getReminderCapabilities. После включения выполнен обычный запуск processReminders:
-enabled:true, sent:0, failed:0, skipped:0. Workflow имеет состояние active и cron
-`2-59/5 * * * *`. Пустой результат подтверждает успешный запрос к настоящей SQLite;
-получение сообщения в пользовательском чате требует задачи с наступившим напоминанием.
+getReminderCapabilities. После включения и создания пользователем задачи
+проверена реальная отправка из GitHub: enabled:true, sent:1, failed:0, skipped:0.
+Пользователь подтвердил получение сообщения в Telegram. Повторный запуск
+вернул sent:0, failed:0, skipped:0 — задача не отправилась повторно.
+Workflow имеет состояние active и cron `2-59/5 * * * *`, ветка main.
+Контрольная отправка проверена ручным запуском workflow; расписание настраивается
+тем же файлом, время запуска определяет GitHub.
 
 Общая последовательность подключения в новом окружении:
 
