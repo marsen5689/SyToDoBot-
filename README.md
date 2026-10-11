@@ -3,6 +3,9 @@
 Менеджер личных задач и самостоятельных напоминаний: React + Vite + TypeScript, официальный Telegram Serverless,
 SQLite через `sdk/db`. Без VPS и отдельного backend-хостинга.
 
+Начало работы в новом чате с ИИ: [передача проекта](docs/AI_HANDOFF.md).
+Отдельные инструкции: [дизайн](docs/design.md), [деплой и эксплуатация](docs/deployment.md).
+
 Реализованы Telegram-профиль, создание задач с описанием и приоритетом,
 выполнение и возврат в активные, удаление с подтверждением, фильтры,
 пагинация по 30 задач, счётчики и прогресс. Интерфейс адаптируется к смартфонам,
@@ -32,6 +35,9 @@ Actions в [marsen5689/SyToDoBot-](https://github.com/marsen5689/SyToDoBot-)
 SyToDoBot/
 ├── AGENTS.md                  # официальные инструкции scaffold CLI
 ├── docs/
+│   ├── AI_HANDOFF.md          # контекст и стартовый промпт для нового ИИ
+│   ├── design.md              # согласованные tokens и правила интерфейса
+│   ├── deployment.md          # подключение CLI, миграции, публикация и scheduler
 │   ├── tgcloud-sdk.md          # официальный справочник SDK
 │   └── verification.md         # проверка требований и её ограничения
 ├── src/
@@ -88,7 +94,8 @@ SyToDoBot/
 │   ├── standalone-reminders.test.mjs # 5 проверок отдельных напоминаний и изоляции
 │   ├── recurrence.test.mjs    # циклы, DST, опережение, повтор и безопасная миграция
 │   ├── sqlite-runtime.mjs     # только тестовый адаптер контрактов SDK
-│   └── browser/app.spec.ts    # интерфейс с официальным WebApp SDK
+│   ├── browser/app.spec.ts    # интерфейс с официальным WebApp SDK
+│   └── browser/recurring.spec.ts # настройки циклов, история и повтор
 ├── scripts/check-backend.mjs  # синтаксис и ограничения runtime
 ├── scripts/run-reminders.mjs  # внешний runner официального CLI
 ├── .github/workflows/task-reminders.yml # подключённый GitHub Actions scheduler
@@ -283,16 +290,27 @@ npx tgcloud fetch
 npx tgcloud status
 npx tgcloud diff
 
+# Проверить diff локальной схемы без изменения базы.
+npx tgcloud migrate --local --dry-run
+
+# Только если нужна и разрешена проверенная безопасная миграция:
+npx tgcloud migrate --local --safe
+
+# После миграции загрузить проверенный код scheduler в существующий repo.
+git push origin HEAD:main
+
 # Собрать frontend и опубликовать код + dist. Это публичный деплой.
 npm run deploy
 
-# Отдельно просмотреть и подтвердить создание таблицы и индексов.
-npx tgcloud migrate
+npx tgcloud status
+npx tgcloud migrate --dry-run
 ```
 
-`push` регистрирует схему, но не изменяет базу. До выполнения `migrate` endpoints,
-обращающиеся к tasks, будут возвращать серверную ошибку; первую публикацию и
-миграцию следует выполнить последовательно.
+`push` регистрирует схему, но не изменяет базу. Текущая production-схема уже применена;
+при отсутствии изменений новая миграция не нужна. При добавлении колонок сначала
+примените согласованную аддитивную миграцию: scheduler исполняет код checkout main,
+поэтому обновление GitHub до миграции может прервать отправку. Полный порядок и
+проверки описаны в [deployment.md](docs/deployment.md).
 
 В @BotFather у `SyToDoBot` настройте Main Mini App / кнопку меню с URL:
 

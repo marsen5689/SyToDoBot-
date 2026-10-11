@@ -5,6 +5,17 @@ This file is auto-loaded by Claude Code, Cursor, and similar tools — keep it s
 and true. For the full SDK reference (db, Bot API, fetch), see
 [docs/tgcloud-sdk.md](docs/tgcloud-sdk.md).
 
+## Start here for this existing project
+
+Before changing SyToDo, read [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md),
+[docs/design.md](docs/design.md), and [docs/deployment.md](docs/deployment.md).
+They record the existing bot, repository, architecture, design contract,
+scheduler, and migration/deployment order. The full functional/API reference is
+[README.md](README.md); historical verification is [docs/verification.md](docs/verification.md).
+Keep these documents current when changing behavior or publishing an update.
+Never add credentials to documentation. The current chat's explicit user
+instructions and authorizations take precedence over this recorded handoff.
+
 ## What this project is
 
 A **Telegram Mini App bot** running on Telegram's serverless platform. You write
