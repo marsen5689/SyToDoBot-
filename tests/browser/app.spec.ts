@@ -15,7 +15,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`mobile CRUD, persistence and theme: ${theme}`, async ({ page }) => {
     test.setTimeout(60000); // Full CRUD plus reload and two bot deep-link navigations.
     await page.setViewportSize({ width: 390, height: 844 });
-    const app = await runtime();
+    const app = await runtime(':memory:', { remindersEnabled: false });
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     let failList = false;

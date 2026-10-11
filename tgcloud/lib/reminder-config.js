@@ -1,4 +1,4 @@
-// Enable only after an external scheduler is connected and verified.
-// Telegram Serverless 0.2.0 documents no durable timers or cron triggers.
-export const remindersEnabled = false;
+// GitHub Actions in marsen5689/SyToDoBot- invokes the official CLI every 5 minutes.
+// Its CLI Access connection was verified before enabling this capability.
+export const remindersEnabled = true;
 export const reminderPrecisionMinutes = 5;
