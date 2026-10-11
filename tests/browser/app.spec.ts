@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { runtime } from '../sqlite-runtime.mjs';
+import type { Page } from '@playwright/test';
 
 // The browser uses the real official WebApp SDK. Only Telegram's authenticated
 // transport is intercepted in this test; application endpoints run against SQLite.
@@ -10,6 +11,21 @@ test.beforeAll(async ({ request }) => {
   sdk = process.env.TELEGRAM_SDK_PATH ? await readFile(process.env.TELEGRAM_SDK_PATH, 'utf8')
     : await (await request.get('https://telegram.org/js/telegram-web-app.js')).text();
 });
+
+async function pickDateTime(page: Page, value: string, label = 'Дедлайн') {
+  const [date, time] = value.split('T');
+  const [year, month] = date.split('-');
+  const [hour, minute] = time.split(':');
+  await page.getByRole('button', { name: new RegExp(`^${label}:`) }).click();
+  await page.getByLabel('Год', { exact: true }).selectOption(year);
+  await page.getByLabel('Месяц', { exact: true }).selectOption(String(Number(month) - 1));
+  await page.getByRole('button', { name: date, exact: true }).click();
+  await page.getByRole('listbox', { name: 'Часы', exact: true }).getByRole('option', { name: hour, exact: true }).click();
+  await page.getByRole('listbox', { name: 'Минуты', exact: true }).getByRole('option', { name: minute, exact: true }).click();
+  await expect(page.getByRole('listbox', { name: 'Часы' }).getByRole('option', { selected: true })).toHaveText(hour);
+  await expect(page.getByRole('listbox', { name: 'Минуты' }).getByRole('option', { selected: true })).toHaveText(minute);
+  await page.getByRole('button', { name: 'Готово', exact: true }).click();
+}
 
 for (const theme of ['light', 'dark'] as const) {
   test(`mobile CRUD, persistence and theme: ${theme}`, async ({ page }) => {
@@ -51,7 +67,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page.getByLabel('Что нужно сделать?').fill('Подготовить запуск');
       await page.getByLabel('Описание').fill('Проверить всё на смартфоне');
       await page.getByText('Важный', { exact: true }).click();
-      await page.getByLabel(/^Дедлайн/).fill('2027-03-10T15:30');
+      await pickDateTime(page, '2027-03-10T15:30');
       await expect(page.getByLabel('Напоминание в Telegram')).toBeDisabled();
       await expect(page.getByText('Автоматическая отправка пока не подключена.')).toBeVisible();
       await page.screenshot({ path: `test-results/form-${theme}.png`, fullPage: true });
@@ -62,10 +78,10 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page.locator('.task-deadline')).toContainText('15:30');
       expect((await app.endpoints.listTasks({}, { initData: { user: { id: 101 } } })).tasks[0].dueAt).toBe(Date.UTC(2027, 2, 10, 12, 30));
       await page.getByRole('button', { name: 'Настроить срок: Подготовить запуск' }).click();
-      await expect(page.getByLabel(/^Дедлайн/)).toHaveValue('2027-03-10T15:30');
+      await expect(page.getByRole('button', { name: /^Дедлайн:/ })).toContainText('15:30');
       await page.setViewportSize({ width: 320, height: 844 });
       expect(await page.getByRole('dialog').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-      await page.getByLabel(/^Дедлайн/).fill('2001-01-01T12:00');
+      await pickDateTime(page, '2001-01-01T12:00');
       await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
       await expect(page.getByText('Просрочено')).toBeVisible();
       await page.getByRole('button', { name: 'Настроить срок: Подготовить запуск' }).click();
@@ -74,7 +90,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page.locator('.task-deadline')).toHaveCount(0);
       await page.setViewportSize({ width: 390, height: 844 });
       await page.getByRole('button', { name: 'Настроить срок: Подготовить запуск' }).click();
-      await page.getByLabel(/^Дедлайн/).fill('2027-03-10T15:30');
+      await pickDateTime(page, '2027-03-10T15:30');
       await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
       await page.screenshot({ path: `test-results/tasks-${theme}.png`, fullPage: true });
       // Refresh failure must not roll back a successful mutation in the UI.
@@ -154,7 +170,7 @@ test('enabled reminders require write permission, save the interval and can be c
     });
     await page.getByRole('button', { name: 'Новая задача' }).click();
     await page.getByLabel('Что нужно сделать?').fill('Задача с напоминанием');
-    await page.getByLabel(/^Дедлайн/).fill('2030-03-10T15:30');
+    await pickDateTime(page, '2030-03-10T15:30');
     await expect(page.getByLabel('Напоминание в Telegram')).toBeEnabled();
     await page.getByLabel('Напоминание в Telegram').selectOption('15');
     await page.getByRole('button', { name: 'Создать задачу' }).click();
@@ -176,3 +192,96 @@ test('enabled reminders require write permission, save the interval and can be c
     expect((await app.endpoints.listTasks({}, { initData: { user: { id: 101 } } })).tasks[0].reminderAt).toBeNull();
   } finally { app.close(); }
 });
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`standalone reminders, calendar and vertical time wheels: ${theme}`, async ({ page }) => {
+    test.setTimeout(90000);
+    await page.setViewportSize({ width: 320, height: 844 });
+    let now = Date.UTC(2030, 2, 10, 12);
+    const app = await runtime(':memory:', { now: () => now });
+    const owner = { initData: { user: { id: 101, first_name: 'Анна' } } };
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('https://telegram.org/js/telegram-web-app.js', route => route.fulfill({ contentType: 'text/javascript', body: sdk }));
+    await page.route('**/api/*', async route => {
+      const endpoint = route.request().url().split('/').pop()!;
+      try {
+        const result = await app.endpoints[endpoint](route.request().postDataJSON(), owner);
+        await route.fulfill({ json: { ok: true, result } });
+      } catch (error: any) {
+        await route.fulfill({ status: 400, json: { ok: false, error_type: 'ENDPOINT_ERROR', description: error.message, parameters: error.parameters } });
+      }
+    });
+    const data = `user=${encodeURIComponent(JSON.stringify({ id: 101, first_name: 'Анна' }))}&auth_date=1791634000&hash=test-fixture-only`;
+    const hash = `#tgWebAppData=${encodeURIComponent(data)}&tgWebAppVersion=9.0&tgWebAppPlatform=web&tgWebAppThemeParams=${encodeURIComponent(JSON.stringify({ bg_color: theme === 'dark' ? '#0a0a0a' : '#ffffff', text_color: theme === 'dark' ? '#ffffff' : '#0a0a0a' }))}`;
+    const nativePermission = async () => page.evaluate(() => {
+      const native = (window as any).Telegram.WebView;
+      const post = native.postEvent;
+      native.postEvent = (name: string, ...args: any[]) => {
+        if (name === 'web_app_request_write_access') native.receiveEvent('write_access_requested', { status: 'allowed' });
+        else post(name, ...args);
+      };
+    });
+    try {
+      await page.goto('/?view=reminders' + hash); await nativePermission();
+      await expect(page.getByRole('heading', { name: 'Мои напоминания' })).toBeVisible();
+      await page.getByRole('button', { name: 'Новое напоминание', exact: true }).click();
+      await page.getByLabel('О чём напомнить?').fill('Позвонить родителям');
+      await page.getByLabel('Детали', { exact: false }).fill('Рассказать хорошие новости');
+      await page.getByRole('button', { name: /^Когда напомнить:/ }).click();
+      await page.getByRole('button', { name: 'Завтра', exact: true }).click();
+      const tomorrow = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+      await expect(page.getByRole('button', { name: tomorrow, exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await page.getByRole('button', { name: 'Готово', exact: true }).click();
+      await pickDateTime(page, '2030-03-10T15:30', 'Когда напомнить');
+      await page.getByRole('button', { name: /^Когда напомнить:/ }).click();
+      const minutes = page.getByRole('listbox', { name: 'Минуты', exact: true });
+      await minutes.scrollIntoViewIfNeeded();
+      const bounds = (await minutes.boundingBox())!;
+      await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      await page.mouse.wheel(0, 80);
+      await expect(minutes.getByRole('option', { selected: true })).toHaveText('32');
+      await minutes.focus(); await minutes.press('End');
+      await expect(minutes.getByRole('option', { selected: true })).toHaveText('59');
+      await minutes.press('Home'); await minutes.press('ArrowDown');
+      await expect(minutes.getByRole('option', { selected: true })).toHaveText('01');
+      await minutes.getByRole('option', { name: '30', exact: true }).click();
+      expect(await page.getByRole('dialog').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      await page.locator('.datetime-panel').screenshot({ path: `test-results/calendar-wheel-${theme}.png` });
+      await page.getByRole('button', { name: 'Готово', exact: true }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Создать напоминание', exact: true }).click();
+      await expect(page.getByRole('dialog')).not.toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Позвонить родителям' })).toBeVisible();
+      const saved = (await app.endpoints.listReminders({}, owner)).tasks[0];
+      expect(saved.dueAt).toBe(Date.UTC(2030, 2, 10, 12, 30));
+      expect((await app.endpoints.listTasks({ status: 'all' }, owner)).tasks).toHaveLength(0);
+      await page.reload(); await nativePermission();
+      await expect(page.getByRole('heading', { name: 'Позвонить родителям' })).toBeVisible();
+      await page.getByRole('button', { name: 'Изменить напоминание: Позвонить родителям' }).click();
+      await page.getByLabel('О чём напомнить?').fill('Позвонить маме');
+      await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Позвонить маме' })).toBeVisible();
+      now = saved.dueAt;
+      await app.endpoints.processReminders({}, { initData: { user: { id: 8347651382 } }, maintenanceJob: 'sytodo-reminders' });
+      await page.getByRole('button', { name: 'Обновить напоминания' }).click();
+      await page.getByRole('tab', { name: /^История/ }).click();
+      await expect(page.getByText('Отправлено', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Ещё раз через 10 минут' }).click();
+      await expect(page.getByRole('tab', { name: /^Ожидают/ })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('heading', { name: 'Позвонить маме' })).toBeVisible();
+      expect((await app.endpoints.getReminder({ id: saved.id }, owner)).task.dueAt).toBe(now + 600000);
+      await expect(page.getByRole('button', { name: 'Обновить напоминания' })).toBeEnabled();
+      await expect(page.locator('.reminder-card')).toHaveCSS('opacity', '1');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      for (const tab of await page.getByRole('tab').all()) expect(await tab.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      await page.screenshot({ path: `test-results/reminders-${theme}.png`, fullPage: true });
+      await page.getByRole('button', { name: 'Удалить напоминание: Позвонить маме' }).click();
+      await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Важное не потеряется' })).toBeVisible();
+      await page.getByRole('navigation', { name: 'Разделы приложения' }).getByRole('button', { name: 'Задачи', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Мои задачи', exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(errors).toEqual([]);
+    } finally { app.close(); }
+  });
+}

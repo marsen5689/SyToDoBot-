@@ -6,9 +6,11 @@ export const APP_URL = 'https://app8347651382.tgcloud.ai/';
 export const BOT_USERNAME = 'SyToDoBot';
 export const commands = [
   { command: 'start', description: 'Начать и открыть главное меню' },
-  { command: 'app', description: 'Открыть приложение с задачами' },
+  { command: 'app', description: 'Задачи и напоминания в одном приложении' },
   { command: 'menu', description: 'Показать главное меню' },
   { command: 'tasks', description: 'Мои активные задачи' },
+  { command: 'reminders', description: 'Мои отдельные напоминания' },
+  { command: 'remind', description: 'Создать напоминание с датой и временем' },
   { command: 'completed', description: 'Мои выполненные задачи' },
   { command: 'all', description: 'Все мои задачи' },
   { command: 'add', description: 'Создать: /add название задачи' },
@@ -46,17 +48,18 @@ export function appButton(text = 'Открыть SyToDo', query = '') {
 }
 
 export function navigation() {
-  return [[appButton('＋ Новая задача', '?action=new')], [
+  return [[appButton('＋ Новая задача', '?action=new'), appButton('＋ Напоминание', '?view=reminders&action=new')], [
     { text: '📋 Активные', callback_data: 'list:active' },
     { text: '✓ Выполненные', callback_data: 'list:completed' },
-  ], [{ text: 'Все задачи', callback_data: 'list:all' }, { text: 'Статистика', callback_data: 'stats' }], [{ text: '← Главное меню', callback_data: 'home' }]];
+  ], [{ text: '🔔 Напоминания', callback_data: 'reminders:active' }], [{ text: 'Все задачи', callback_data: 'list:all' }, { text: 'Статистика', callback_data: 'stats' }], [{ text: '← Главное меню', callback_data: 'home' }]];
 }
 
 export function home(user, welcome = false) {
   return {
-    text: `${welcome ? `Привет, ${html(user.first_name || 'друг')}!\n\n` : ''}<b>SyToDo — ваши планы в своём ритме.</b>\n\nСоздавайте задачи в приложении или прямо здесь: <code>/add Купить продукты</code>. Данные в чате и Mini App общие и видны только вам.\n\nВыберите, с чего начать:`,
+    text: `${welcome ? `Привет, ${html(user.first_name || 'друг')}!\n\n` : ''}<b>SyToDo — ваши планы в своём ритме.</b>\n\nЗадачи и отдельные напоминания — в одном боте. Создавайте задачи в приложении или прямо здесь: <code>/add Купить продукты</code>. Для сообщения в нужный момент откройте /remind. Данные в чате и Mini App общие и видны только вам.\n\nВыберите, с чего начать:`,
     reply_markup: { inline_keyboard: [
-      [appButton()], [appButton('＋ Создать задачу', '?action=new')],
+      [appButton()], [appButton('＋ Создать задачу', '?action=new'), appButton('＋ Напоминание', '?view=reminders&action=new')],
+      [{ text: '🔔 Мои напоминания', callback_data: 'reminders:active' }],
       [{ text: '📋 Активные задачи', callback_data: 'list:active' }, { text: '✓ Выполненные', callback_data: 'list:completed' }],
       [{ text: 'Все задачи', callback_data: 'list:all' }],
       [{ text: '👤 Мой профиль', callback_data: 'profile' }, { text: '📊 Статистика', callback_data: 'stats' }],
@@ -67,7 +70,7 @@ export function home(user, welcome = false) {
 
 export function help() {
   return {
-    text: '<b>Как пользоваться SyToDo</b>\n\n/start, /menu — главное меню\n/app — открыть приложение\n/tasks — активные задачи\n/completed — выполненные\n/all — все задачи\n/add Купить продукты — создать задачу\n/done 42 — выполнить задачу №42\n/undo 42 — вернуть её в активные\n/delete 42 — удалить с подтверждением\n/profile — ваш профиль\n/stats — статистика\n/cancel — вернуться в меню\n/help — эта справка\n\nНомер задачи указан в списке. Можно пользоваться кнопками под сообщением. Название — до 200 символов; описание и приоритет удобно добавить в приложении.',
+    text: '<b>Как пользоваться SyToDo</b>\n\n/start, /menu — главное меню\n/app — открыть приложение\n/tasks — активные задачи\n/reminders — отдельные напоминания\n/remind — создать напоминание в календаре\n/completed — выполненные\n/all — все задачи\n/add Купить продукты — создать задачу\n/done 42 — выполнить задачу №42\n/undo 42 — вернуть её в активные\n/delete 42 — удалить с подтверждением\n/profile — ваш профиль\n/stats — статистика\n/cancel — вернуться в меню\n/help — эта справка\n\nНапоминания работают отдельно от задач. Выберите дату и прокрутите часы и минуты в Mini App. Бот напишет в личный чат; из сообщения можно отложить напоминание на 10 минут. Возможна задержка отправки. Номер задачи указан в списке; можно пользоваться кнопками под сообщением.',
     reply_markup: { inline_keyboard: navigation() },
   };
 }
@@ -120,6 +123,26 @@ export async function confirmDelete(userId, id) {
   ]] } };
 }
 
+export async function reminderList(userId, status = 'active', cursor) {
+  const page = await listUserTasks(userId, { status, cursor }, 5, 'reminder');
+  const headings = { active: 'Предстоящие напоминания', completed: 'Отправленные напоминания', all: 'Все напоминания' };
+  const lines = page.tasks.map(item => `<b>${html(item.title)}</b>\n${formatDeadline(item)}\n№<code>${item.id}</code> · ${item.reminderSentAt !== null ? 'Отправлено' : item.reminderAt === null ? 'Отправка приостановлена' : 'Запланировано'}`);
+  const keyboard = page.tasks.map(item => [appButton(`Изменить №${item.id}`, `?view=reminders&edit=${item.id}`),
+    { text: `Удалить №${item.id}`, callback_data: `reminder:ask_delete:${item.id}` }]);
+  if (page.nextCursor) keyboard.push([{ text: 'Следующие 5 →', callback_data: `reminders:${status}:${page.nextCursor}` }]);
+  keyboard.push([{ text: 'Предстоящие', callback_data: 'reminders:active' }, { text: 'Отправленные', callback_data: 'reminders:completed' }]);
+  keyboard.push([appButton('＋ Создать напоминание', '?view=reminders&action=new')], [{ text: '← Главное меню', callback_data: 'home' }]);
+  return { text: `<b>${headings[status]}</b>\nОжидают: ${page.counts.active} · Отправлено: ${page.counts.completed}\n\n${lines.length ? lines.join('\n\n') : 'Здесь пока пусто. Создайте напоминание с датой и временем.'}`, reply_markup: { inline_keyboard: keyboard } };
+}
+
+export async function confirmReminderDelete(userId, id) {
+  const item = await getUserTask(userId, id, 'reminder');
+  return { text: `<b>Удалить напоминание?</b>\n\n${html(item.title)}\n№<code>${item.id}</code>\n\nОжидающая отправка будет отменена.`, reply_markup: { inline_keyboard: [[
+    { text: 'Да, удалить', callback_data: `reminder:delete:${item.id}` },
+    { text: 'Оставить', callback_data: 'reminders:active' },
+  ]] } };
+}
+
 export function commandId(argument) {
   if (!/^[1-9]\d{0,15}$/.test(argument)) throw new EndpointError('Укажите номер задачи. Например: /done 42. Номер есть в списке /tasks.', { code: 'VALIDATION_ERROR' });
   return positiveId(Number(argument));
@@ -146,6 +169,6 @@ export async function setupMenu(chatId) {
   // Runs on /start and /menu after deployment, never during local implementation.
   try { await api.setMyCommands({ commands, scope: { type: 'chat', chat_id: chatId } }); }
   catch { console.warn('Could not configure the chat command list'); }
-  try { await api.setChatMenuButton({ chat_id: chatId, menu_button: { type: 'web_app', text: 'Мои задачи', web_app: { url: APP_URL } } }); }
+  try { await api.setChatMenuButton({ chat_id: chatId, menu_button: { type: 'web_app', text: 'SyToDo', web_app: { url: APP_URL } } }); }
   catch { console.warn('Could not configure the Mini App menu button'); }
 }

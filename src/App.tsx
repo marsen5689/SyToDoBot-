@@ -7,6 +7,7 @@ import { Sheet } from './Sheet';
 import { EditSchedule } from './EditSchedule';
 import { deadlineFormat } from './schedule';
 import { Icon } from './icons';
+import { RemindersPanel } from './RemindersPanel';
 import type { Profile, Task } from './types';
 
 const priorityLabels = { high: 'Важная', normal: 'Обычная', low: 'Не спешит' };
@@ -71,10 +72,11 @@ function EmptyState({ completed, onCreate }: { completed: boolean; onCreate: () 
 export function App() {
   useTelegram();
   const access = availability();
+  const [section, setSection] = useState<'tasks' | 'reminders'>(() => new URLSearchParams(window.location.search).get('view') === 'reminders' ? 'reminders' : 'tasks');
   const { status, selectStatus, page, loading, error, applyWrite, refresh, loadMore } = useTasks();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState('');
-  const [creating, setCreating] = useState(() => access === 'ready' && new URLSearchParams(window.location.search).get('action') === 'new');
+  const [creating, setCreating] = useState(() => access === 'ready' && section === 'tasks' && new URLSearchParams(window.location.search).get('action') === 'new');
   const [deleting, setDeleting] = useState<Task | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<Task | null>(null);
   const [now, setNow] = useState(Date.now);
@@ -84,6 +86,14 @@ export function App() {
   const [notice, setNotice] = useState('');
   const writeLock = useRef(false);
   const profileSequence = useRef(0);
+
+  function selectSection(next: 'tasks' | 'reminders') {
+    setSection(next);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('action'); url.searchParams.delete('edit'); url.searchParams.delete('filter');
+    if (next === 'reminders') url.searchParams.set('view', 'reminders'); else url.searchParams.delete('view');
+    window.history.replaceState(null, '', url);
+  }
 
   async function loadProfile() {
     if (access !== 'ready') return;
@@ -132,14 +142,18 @@ export function App() {
 
   return <div className="app-shell">
     <header className="header"><a className="brand" href="/" aria-label="SyToDo — главная"><span className="brand-mark"><Icon name="check" size={23} /></span><span>SyToDo<span className="brand-period">.</span></span></a>
-      <div className="header-caption"><span>Личное пространство</span><span className="breadcrumb-divider">/</span><span>Задачи</span></div><div className="header-date">{date}</div></header>
+      <div className="header-caption"><span>Личное пространство</span><span className="breadcrumb-divider">/</span><span>{section === 'tasks' ? 'Задачи' : 'Напоминания'}</span></div><div className="header-date">{date}</div></header>
     <main>
       <div className="intro"><div className="intro-copy"><div className="eyebrow">ВАШ ДЕНЬ. ВАШ ПЛАН.</div>
-        <h1>Порядок в каждом дне.</h1>
-        <p>Сохраните важное. Сосредоточьтесь на следующем шаге.</p>
+        <h1>{section === 'tasks' ? 'Порядок в каждом дне.' : 'Вовремя о важном.'}</h1>
+        <p>{section === 'tasks' ? 'Сохраните важное. Сосредоточьтесь на следующем шаге.' : 'Запланируйте сообщение. Мы напомним вам в Telegram.'}</p>
       </div><ProfileCard profile={profile} error={profileError} retry={() => void loadProfile()} /></div>
 
-      <div className="workspace">
+      <nav className="section-navigation" aria-label="Разделы приложения">
+        <button type="button" aria-current={section === 'tasks' ? 'page' : undefined} className={section === 'tasks' ? 'selected' : ''} onClick={() => selectSection('tasks')}><Icon name="list" size={18} />Задачи</button>
+        <button type="button" aria-current={section === 'reminders' ? 'page' : undefined} className={section === 'reminders' ? 'selected' : ''} onClick={() => selectSection('reminders')}><Icon name="bell" size={18} />Напоминания</button>
+      </nav>
+      {section === 'tasks' ? <div className="workspace">
         <aside className="overview"><div className="overview-title"><Icon name="list" size={18} /><span>Обзор задач</span></div>
           <div className="stat-grid"><div className="stat"><span className="stat-label">АКТИВНЫЕ</span><strong>{active ?? '—'}</strong><span className="stat-caption">в работе</span></div>
             <div className="stat"><span className="stat-label">ВЫПОЛНЕНО</span><strong>{completed ?? '—'}</strong><span className="stat-caption">в списке</span></div></div>
@@ -178,7 +192,7 @@ export function App() {
           </div>
           <div className="list-footer"><Icon name="shield" size={16} /><span>Задачи сохраняются автоматически</span></div>
         </section>
-      </div>
+      </div> : <RemindersPanel />}
     </main>
     <footer className="footer"><span>SyToDo<span className="brand-period">.</span><span className="footer-divider">/</span>Для того, что важно</span><span>Ваши задачи в Telegram</span></footer>
     <div className="toast-region" role="status" aria-live="polite">{notice && <div className="toast"><Icon name="check" size={18} />{notice}</div>}</div>

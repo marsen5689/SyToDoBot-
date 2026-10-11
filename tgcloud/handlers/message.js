@@ -1,4 +1,4 @@
-import { BOT_USERNAME, privateUser, appButton, navigation, home, help, profile, stats, taskList, taskResult, confirmDelete, commandId, render, setupMenu, errorView } from '../lib/bot.js';
+import { BOT_USERNAME, privateUser, appButton, navigation, home, help, profile, stats, taskList, taskResult, confirmDelete, reminderList, commandId, render, setupMenu, errorView } from '../lib/bot.js';
 import { createUserTask, completeUserTask } from '../lib/task-service.js';
 
 export default async function message(input) {
@@ -15,8 +15,11 @@ export default async function message(input) {
         await setupMenu(input.chat.id);
         view = home(user, command === 'start'); break;
       case 'help': view = help(); break;
-      case 'app': view = { text: 'Ваши задачи, профиль и прогресс — в одном месте.', reply_markup: { inline_keyboard: [[appButton()], ...navigation()] } }; break;
+      case 'app': view = { text: 'Ваши задачи, напоминания и профиль — в одном месте.', reply_markup: { inline_keyboard: [[appButton()], ...navigation()] } }; break;
       case 'tasks': case 'active': view = await taskList(user.id); break;
+      case 'reminders': view = await reminderList(user.id); break;
+      case 'remind': view = { text: 'О чём напомнить? Выберите дату в календаре и прокрутите часы и минуты. Напоминание сохранится отдельно от задач.',
+        reply_markup: { inline_keyboard: [[appButton('＋ Создать напоминание', '?view=reminders&action=new')], [{ text: 'Мои напоминания', callback_data: 'reminders:active' }]] } }; break;
       case 'completed': view = await taskList(user.id, 'completed'); break;
       case 'all': view = await taskList(user.id, 'all'); break;
       case 'profile': view = profile(user); break;

@@ -1,6 +1,6 @@
 # SyToDo — Telegram Mini App
 
-Менеджер личных задач: React + Vite + TypeScript, официальный Telegram Serverless,
+Менеджер личных задач и самостоятельных напоминаний: React + Vite + TypeScript, официальный Telegram Serverless,
 SQLite через `sdk/db`. Без VPS и отдельного backend-хостинга.
 
 Реализованы Telegram-профиль, создание задач с описанием и приоритетом,
@@ -16,6 +16,12 @@ SQLite через `sdk/db`. Без VPS и отдельного backend-хост�
 Actions в [marsen5689/SyToDoBot-](https://github.com/marsen5689/SyToDoBot-)
 запускает официальный Telegram CLI примерно каждые 5 минут.
 
+В разделе «Напоминания» можно создать сообщение на выбранные дату и время,
+изменить его, удалить, посмотреть историю отправки и повторить через 10 минут.
+Сообщения приходят от того же SyToDoBot при закрытом Mini App. Календарь имеет
+выбор месяца и года, кнопки «Сегодня» / «Завтра» и вертикально прокручиваемые
+колонки часов и минут с фиксацией выбранной строки, как в iPhone.
+
 ## Структура
 
 ```text
@@ -29,6 +35,9 @@ SyToDoBot/
 │   ├── CreateTask.tsx         # создание и безопасный повтор запроса
 │   ├── EditSchedule.tsx       # изменение дедлайна и напоминания
 │   ├── ScheduleFields.tsx     # дата/время и интервалы напоминаний
+│   ├── DateTimePicker.tsx     # календарь и прокручиваемые часы/минуты
+│   ├── ReminderForm.tsx       # создание и изменение самостоятельного напоминания
+│   ├── RemindersPanel.tsx     # ожидающие, история, повтор и удаление
 │   ├── schedule.ts            # локальное время ↔ UTC
 │   ├── reminderPermission.ts # официальный requestWriteAccess
 │   ├── useReminderCapabilities.ts # доступность автоматической отправки
@@ -44,6 +53,7 @@ SyToDoBot/
 │   ├── schema.js              # SQLite tasks, индексы и ограничения
 │   ├── lib/tasks.js           # текущий пользователь и валидация
 │   ├── lib/task-service.js    # общая логика для чата и Mini App
+│   ├── lib/reminder-service.js # отдельные напоминания, изменение и повтор
 │   ├── lib/bot.js             # команды, меню и inline-кнопки
 │   ├── lib/reminders.js       # отправка, lease и отмена устаревших задач
 │   ├── lib/reminder-config.js # напоминания включены; точность scheduler 5 минут
@@ -56,12 +66,19 @@ SyToDoBot/
 │       ├── setTaskCompleted.js
 │       ├── setTaskSchedule.js
 │       ├── getReminderCapabilities.js
+│       ├── createReminder.js
+│       ├── listReminders.js
+│       ├── getReminder.js
+│       ├── updateReminder.js
+│       ├── snoozeReminder.js
+│       ├── deleteReminder.js
 │       ├── processReminders.js # защищённый служебный вызов через CLI
 │       └── deleteTask.js
 ├── tests/
 │   ├── backend.test.mjs       # 6 проверок логики на настоящей SQLite
 │   ├── bot.test.mjs           # 6 проверок команд, кнопок и прав доступа
 │   ├── reminders.test.mjs     # 8 проверок сроков, отправки и миграции
+│   ├── standalone-reminders.test.mjs # 5 проверок отдельных напоминаний и изоляции
 │   ├── sqlite-runtime.mjs     # только тестовый адаптер контрактов SDK
 │   └── browser/app.spec.ts    # интерфейс с официальным WebApp SDK
 ├── scripts/check-backend.mjs  # синтаксис и ограничения runtime
@@ -118,6 +135,20 @@ Foreign keys не используются: в этом runtime они не по
 | `createTask` | `{ title, note?, priority?, requestId }` | `{ task }` |
 | `setTaskCompleted` | `{ id, completed: boolean }` | `{ task }` |
 | `deleteTask` | `{ id }` | `{ id }` |
+| `createReminder` | `{ title, note?, dueAt, dueOffsetMinutes, requestId }` | `{ task }`, самостоятельное напоминание |
+| `listReminders` | `{ status?: 'active' \| 'completed' \| 'all', cursor?: number }` | `{ tasks, counts, nextCursor }`; completed означает отправленные |
+| `getReminder` | `{ id }` | `{ task }`, только своё самостоятельное напоминание |
+| `updateReminder` | `{ id, title, note?, dueAt, dueOffsetMinutes }` | `{ task }` |
+| `snoozeReminder` | `{ id }` | `{ task }`, повтор через 10 минут серверного времени |
+| `deleteReminder` | `{ id }` | `{ id }` |
+
+`dueAt` — UTC timestamp в миллисекундах, `dueOffsetMinutes` — смещение часового
+пояса устройства. Новое или изменённое время отправки должно быть в будущем.
+Самостоятельные напоминания используют существующую SQLite-таблицу `tasks`:
+сервер формирует отдельный namespace `reminder:` в приватном `request_key`.
+Клиент не может подделать этот namespace. Все запросы ограничены владельцем и
+типом записи: задачи и напоминания не смешиваются даже для одного пользователя.
+Это обновление не требует изменения схемы или новой миграции.
 
 Названия задач: 1–200 символов после trim, без управляющих символов. Описание:
 до 1000 символов. Приоритет: `low`, `normal` или `high`. ID: положительное безопасное
@@ -218,7 +249,7 @@ https://app8347651382.tgcloud.ai/
 ```
 
 После публикации отправьте боту `/start`: он настроит список команд для вашего
-личного чата и кнопку меню «Мои задачи», ведущую в Mini App.
+личного чата и кнопку меню «SyToDo», ведущую в Mini App.
 Webhook обновляется CLI при push; проверить его можно `npx tgcloud webhook`.
 После настройки проверьте приложение с двумя реальными Telegram-аккаунтами:
 создание, выполнение, возврат, удаление и повторное открытие. Чужие задачи не
@@ -235,6 +266,8 @@ initData должен быть отклонён платформой с 401.
 | `/start` | Приветствие, настройка меню и список действий |
 | `/menu` | Повторная настройка и открытие главного меню |
 | `/app` | Кнопка открытия Mini App |
+| `/remind` | Открытие формы нового самостоятельного напоминания |
+| `/reminders` | Напоминания с фильтрами ожидающих/отправленных, редактированием и удалением |
 | `/tasks` | Активные задачи, по 5 на страницу |
 | `/completed` | Выполненные задачи |
 | `/all` | Все задачи |
@@ -256,6 +289,10 @@ initData должен быть отклонён платформой с 401.
 возврат к началу и открытие соответствующего списка в приложении. Кнопка
 «Новая задача» открывает Mini App сразу с формой создания (`?action=new`).
 Фильтр из чата передаётся через `?filter=active|completed|all`.
+Кнопка «Новое напоминание» открывает `?view=reminders&action=new`, редактирование —
+`?view=reminders&edit=ID`. У доставленного самостоятельного напоминания есть
+кнопка «Ещё раз через 10 минут». Повторное нажатие старой кнопки не сдвигает
+уже назначенное будущее время. Удаление отменяет ожидающую отправку.
 
 Telegram updates не имеют `ctx.initData`: для чат-команд владельцем служит
 `message.from.id`, для inline-кнопок — `callback_query.from.id`, предоставленные

@@ -1,45 +1,47 @@
 import { db, EndpointError } from 'sdk';
-import { eq, and, lt, desc, sql } from 'sdk/db';
+import { eq, and, lt, desc, sql, isNull, isNotNull } from 'sdk/db';
 import { tasks } from '../schema.js';
-import { objectInput, positiveId, createInput, scheduleInput, validateNewReminder, taskColumns, ownedTask, notFound } from './tasks.js';
+import { objectInput, positiveId, createInput, scheduleInput, validateNewReminder, taskColumns, ownedTask, recordScope, notFound } from './tasks.js';
 
 // Callers must supply identity from verified endpoint context or a Telegram update.
-export async function taskCounts(userId) {
+export async function taskCounts(userId, kind = 'task') {
   positiveId(userId, 'user');
-  const active = await db.$count(tasks, and(eq(tasks.userId, userId), eq(tasks.completed, false)));
-  const completed = await db.$count(tasks, and(eq(tasks.userId, userId), eq(tasks.completed, true)));
+  const active = await db.$count(tasks, and(recordScope(userId, kind), kind === 'reminder' ? isNull(tasks.reminderSentAt) : eq(tasks.completed, false)));
+  const completed = await db.$count(tasks, and(recordScope(userId, kind), kind === 'reminder' ? isNotNull(tasks.reminderSentAt) : eq(tasks.completed, true)));
   return { active, completed };
 }
 
-export async function listUserTasks(userId, input, pageSize = 30) {
+export async function listUserTasks(userId, input, pageSize = 30, kind = 'task') {
   positiveId(userId, 'user');
   objectInput(input);
   const status = input.status ?? 'active';
   if (!['active', 'completed', 'all'].includes(status)) {
     throw new EndpointError('Некорректный фильтр.', { code: 'VALIDATION_ERROR', field: 'status' });
   }
-  const conditions = [eq(tasks.userId, userId)];
-  if (status !== 'all') conditions.push(eq(tasks.completed, status === 'completed'));
+  const conditions = [recordScope(userId, kind)];
+  if (status !== 'all') conditions.push(kind === 'reminder'
+    ? status === 'completed' ? isNotNull(tasks.reminderSentAt) : isNull(tasks.reminderSentAt)
+    : eq(tasks.completed, status === 'completed'));
   if (input.cursor !== undefined && input.cursor !== null) conditions.push(lt(tasks.id, positiveId(input.cursor, 'cursor')));
   const rows = await db.select(taskColumns).from(tasks)
     .where(and(...conditions)).orderBy(desc(tasks.id)).limit(pageSize + 1).all();
-  const counts = await taskCounts(userId);
+  const counts = await taskCounts(userId, kind);
   const items = rows.slice(0, pageSize);
   return { tasks: items, counts, nextCursor: rows.length > pageSize ? items[items.length - 1].id : null };
 }
 
-export async function getUserTask(userId, id) {
+export async function getUserTask(userId, id, kind = 'task') {
   positiveId(userId, 'user');
   positiveId(id);
-  const task = await db.select(taskColumns).from(tasks).where(ownedTask(userId, id)).get();
+  const task = await db.select(taskColumns).from(tasks).where(ownedTask(userId, id, kind)).get();
   if (!task) notFound();
   return task;
 }
 
-export async function createUserTask(userId, input) {
+export async function createUserTask(userId, input, kind = 'task') {
   positiveId(userId, 'user');
   const { title, note, priority, requestId, ...schedule } = createInput(input);
-  const requestKey = `${userId}:${requestId}`;
+  const requestKey = `${kind === 'reminder' ? 'reminder:' : ''}${userId}:${requestId}`;
   const now = Date.now();
   const existing = await db.select(taskColumns).from(tasks)
     .where(and(eq(tasks.userId, userId), eq(tasks.requestKey, requestKey))).get();
@@ -73,11 +75,11 @@ export async function completeUserTask(userId, input) {
   return { task };
 }
 
-export async function deleteUserTask(userId, input) {
+export async function deleteUserTask(userId, input, kind = 'task') {
   positiveId(userId, 'user');
   objectInput(input);
   const id = positiveId(input.id);
-  const [deleted] = await db.delete(tasks).where(ownedTask(userId, id)).returning({ id: tasks.id }).run();
+  const [deleted] = await db.delete(tasks).where(ownedTask(userId, id, kind)).returning({ id: tasks.id }).run();
   if (!deleted) notFound();
   return { id: deleted.id };
 }

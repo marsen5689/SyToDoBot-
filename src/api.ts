@@ -42,6 +42,12 @@ export function callEndpoint<T>(name: string, input: object = {}): Promise<T> {
   });
 }
 export const api = {
+  reminders: (status: TaskStatus, cursor?: number) => callEndpoint<TaskPage>('listReminders', { status, ...(cursor ? { cursor } : {}) }),
+  getReminder: (id: number) => callEndpoint<{ task: Task }>('getReminder', { id }),
+  createReminder: (input: { title: string; note: string; requestId: string } & TaskSchedule) => callEndpoint<{ task: Task }>('createReminder', input),
+  updateReminder: (id: number, input: { title: string; note: string } & TaskSchedule) => callEndpoint<{ task: Task }>('updateReminder', { id, ...input }),
+  snoozeReminder: (id: number) => callEndpoint<{ task: Task }>('snoozeReminder', { id }),
+  deleteReminder: (id: number) => callEndpoint<{ id: number }>('deleteReminder', { id }),
   reminderCapabilities: () => callEndpoint<{ enabled: boolean; precisionMinutes: number }>('getReminderCapabilities'),
   profile: () => callEndpoint<Profile>('getProfile'),
   tasks: (status: TaskStatus, cursor?: number) => callEndpoint<TaskPage>('listTasks', { status, ...(cursor ? { cursor } : {}) }),

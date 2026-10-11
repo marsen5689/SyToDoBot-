@@ -1,4 +1,4 @@
-import { localTimeZone } from './schedule';
+import { DateTimePicker } from './DateTimePicker';
 
 export function ScheduleFields({ value, onChange, invalid = false, reminderMinutes, onReminderChange, reminderState, completed = false }: {
   value: string; onChange: (value: string) => void; invalid?: boolean;
@@ -7,13 +7,7 @@ export function ScheduleFields({ value, onChange, invalid = false, reminderMinut
   completed?: boolean;
 }) {
   return <div className="schedule-fields">
-    <label htmlFor="task-deadline">Дедлайн <span className="optional">необязательно</span></label>
-    <input id="task-deadline" type="datetime-local" value={value} onChange={(event) => {
-      onChange(event.target.value); if (!event.target.value) onReminderChange(null);
-    }}
-      min="2000-01-01T00:00" max="2099-12-31T23:59" aria-invalid={invalid} aria-describedby="deadline-hint" />
-    <div className="input-caption" id="deadline-hint"><span>{localTimeZone(value)}</span>
-      {value && <button type="button" className="text-button clear-deadline" onClick={() => { onChange(''); onReminderChange(null); }}>Очистить</button>}</div>
+    <DateTimePicker value={value} invalid={invalid} onChange={next => { onChange(next); if (!next) onReminderChange(null); }} />
     <label htmlFor="task-reminder">Напоминание в Telegram</label>
     <select id="task-reminder" value={reminderMinutes === null ? 'off' : String(reminderMinutes)}
       disabled={!value || (reminderState !== 'enabled' && reminderMinutes === null)} aria-describedby="reminder-hint"

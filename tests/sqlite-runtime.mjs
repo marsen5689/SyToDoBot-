@@ -30,6 +30,7 @@ const operators = {
   text: (name) => column('TEXT', name),
   boolean: (name) => column('BOOLEAN', name),
   eq: binary('='), lt: binary('<'), lte: binary('<='),
+  like: binary('LIKE'), notLike: binary('NOT LIKE'),
   isNull: (value) => fragment(`${expression(value).text} IS NULL`),
   isNotNull: (value) => fragment(`${expression(value).text} IS NOT NULL`),
   and: (...parts) => fragment(`(${parts.map((p) => p.text).join(' AND ')})`, parts.flatMap((p) => p.params)),
@@ -147,7 +148,7 @@ export async function runtime(filename = ':memory:', options = {}) {
     return module;
   }
   const endpoints = {};
-  for (const name of ['getProfile', 'listTasks', 'createTask', 'setTaskCompleted', 'deleteTask', 'setTaskSchedule', 'getReminderCapabilities', 'processReminders']) {
+  for (const name of ['getProfile', 'listTasks', 'createTask', 'setTaskCompleted', 'deleteTask', 'setTaskSchedule', 'getReminderCapabilities', 'processReminders', 'createReminder', 'listReminders', 'getReminder', 'updateReminder', 'snoozeReminder', 'deleteReminder']) {
     const module = await load(`./endpoints/${name}.js`);
     await module.evaluate();
     endpoints[name] = module.namespace.default;

@@ -26,14 +26,16 @@ export async function dispatchDueReminders() {
     // Recheck after claiming: completion, deletion or rescheduling cancels it.
     const current = await db.select().from(tasks).where(and(claim, eq(tasks.completed, false), isNull(tasks.reminderSentAt))).get();
     if (!current) { result.skipped++; continue; }
+    const standalone = current.requestKey.startsWith('reminder:');
     try {
       await api.sendMessage({
         chat_id: current.userId,
         parse_mode: 'HTML',
-        text: `<b>Напоминание о задаче</b>\n\n${html(current.title)}\nДедлайн: ${formatDeadline(current)}\n№<code>${current.id}</code>`,
+        text: `<b>${standalone ? 'Напоминание' : 'Напоминание о задаче'}</b>\n\n${html(current.title)}${standalone && current.note ? `\n${html(current.note)}` : ''}\n${standalone ? 'Время' : 'Дедлайн'}: ${formatDeadline(current)}\n№<code>${current.id}</code>`,
         reply_markup: { inline_keyboard: [
-          [{ text: '✓ Выполнить', callback_data: `task:done:${current.id}` }],
-          [{ text: 'Открыть задачи', web_app: { url: APP_URL } }],
+          [standalone ? { text: 'Отложить на 10 минут', callback_data: `reminder:snooze:${current.id}` }
+            : { text: '✓ Выполнить', callback_data: `task:done:${current.id}` }],
+          [{ text: standalone ? 'Открыть напоминания' : 'Открыть задачи', web_app: { url: APP_URL + (standalone ? '?view=reminders' : '') } }],
         ] },
       });
       await db.update(tasks).set({ reminderSentAt: Date.now(), reminderLeaseUntil: null }).where(claim).run();

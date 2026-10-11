@@ -1,5 +1,5 @@
 import { EndpointError } from 'sdk';
-import { eq, and } from 'sdk/db';
+import { eq, and, like, notLike } from 'sdk/db';
 import { tasks } from '../schema.js';
 import { remindersEnabled } from './reminder-config.js';
 
@@ -33,8 +33,16 @@ export function positiveId(value, field = 'id') {
   return value;
 }
 
-export function ownedTask(userId, id) {
-  return and(eq(tasks.userId, userId), eq(tasks.id, id));
+// Separate server-owned idempotency namespaces distinguish standalone reminders
+// from legacy task records without changing the deployed SQLite schema.
+// Client requestId validation excludes ':'; createTask cannot forge this prefix.
+export function recordScope(userId, kind = 'task') {
+  return and(eq(tasks.userId, userId), kind === 'reminder'
+    ? like(tasks.requestKey, 'reminder:%') : notLike(tasks.requestKey, 'reminder:%'));
+}
+
+export function ownedTask(userId, id, kind = 'task') {
+  return and(recordScope(userId, kind), eq(tasks.id, id));
 }
 
 export function notFound() {
