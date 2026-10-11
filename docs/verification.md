@@ -262,3 +262,27 @@ ALTER TABLE tasks ADD COLUMN last_reminder_due_at INTEGER;
 поэтому обновление его кода выполняется только после добавления полей.
 В соответствии с первоначальным требованием пользователя запрошено
 разрешение на эти две операции и публикацию; cloud revision остаётся 5.
+
+После ответа пользователя «Да, применить миграцию и опубликовать» 11 октября
+2026 повторная проверка показала те же две операции. Выполнен официальный
+tgcloud migrate --local --safe: applied 2, skipped 0. Затем commit 1a4a7c6
+загружен в main marsen5689/SyToDoBot-, после чего tgcloud push опубликовал
+новую схему, 7 серверных изменений и новую сборку: cloud revision 6.
+Дополнительных операций изменения данных не выполнялось.
+
+После публикации status подтвердил чистое состояние, webhook in sync,
+9 статических файлов. migrate --dry-run: no schema changes, база в sync.
+Все 9 файлов вернули HTTP 200 и совпали с dist по SHA-256. Настоящий runtime
+listReminders успешно выполнил запрос с новой JSON-колонкой и условием
+активных циклов; getReminderCapabilities вернул enabled:true, precisionMinutes:5.
+createReminder, listReminders, updateReminder, snoozeReminder, deleteReminder
+и processReminders вернули HTTP 401 при подставленных userId/ctx в теле
+без подписанного initData.
+
+Контрольный запуск обновлённого dispatcher из GitHub:
+https://github.com/marsen5689/SyToDoBot-/actions/runs/38127926143 — success,
+headSha 1a4a7c6, event workflow_dispatch. Результат enabled:true, sent:1,
+failed:0, skipped:0 (89 ms). Отправлена существовавшая ожидающая запись;
+агрегированный ответ не сообщает её тип. Повторения при переводе часов и
+нескольких следующих циклах проверены тестами; получение нового циклического
+напоминания в пользовательском чате в этой публикации не подтверждалось.
