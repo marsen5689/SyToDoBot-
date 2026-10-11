@@ -1,0 +1,34 @@
+name: Telegram task reminders
+
+on:
+  workflow_dispatch:
+    inputs:
+      verify_only:
+        description: 'Verify Telegram CLI access without sending reminders'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '2-59/5 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sytodo-task-reminders
+  cancel-in-progress: false
+
+jobs:
+  reminders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node scripts/run-reminders.mjs
+        env:
+          TGCLOUD_TOKEN: ${{ secrets.TGCLOUD_TOKEN }}
+          VERIFY_ONLY: ${{ inputs.verify_only || 'false' }}

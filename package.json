@@ -1,12 +1,36 @@
 {
-  "name": "SyToDoBot",
+  "name": "sytodo-bot",
+  "version": "1.0.0",
   "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
   "devDependencies": {
-    "@tgcloud/cli": "^0.2.0"
+    "@playwright/test": "^1.64.0",
+    "@tgcloud/cli": "^0.2.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2"
   },
   "scripts": {
-    "deploy": "tgcloud push",
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --experimental-vm-modules --test --test-isolation=none tests/*.test.mjs",
+    "test:ui": "NODE_OPTIONS=--experimental-vm-modules playwright test",
+    "reminders": "node scripts/run-reminders.mjs",
+    "check:backend": "node scripts/check-backend.mjs",
+    "check": "npm run check:backend && npm test && npm run build",
+    "deploy": "npm run build && tgcloud push",
     "status": "tgcloud status",
     "run": "tgcloud run"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

@@ -1,0 +1,56 @@
+import { db, api, BotApiError } from 'sdk';
+import { and, eq, lte, isNull, isNotNull, or, asc } from 'sdk/db';
+import { tasks } from '../schema.js';
+import { html, APP_URL, formatDeadline } from './bot.js';
+
+const LEASE_MS = 10 * 60 * 1000;
+const BATCH_SIZE = 20;
+
+function pending(now) {
+  return and(eq(tasks.completed, false), isNotNull(tasks.reminderAt), lte(tasks.reminderAt, now),
+    isNull(tasks.reminderSentAt), or(isNull(tasks.reminderLeaseUntil), lte(tasks.reminderLeaseUntil, now)));
+}
+
+// Called by the protected maintenance endpoint, never by a user-supplied ID.
+export async function dispatchDueReminders() {
+  const now = Date.now();
+  const candidates = await db.select().from(tasks).where(pending(now)).orderBy(asc(tasks.reminderAt)).limit(BATCH_SIZE).all();
+  const result = { enabled: true, sent: 0, failed: 0, skipped: 0 };
+  for (const candidate of candidates) {
+    const leaseUntil = now + LEASE_MS;
+    const ownedVersion = and(eq(tasks.id, candidate.id), eq(tasks.userId, candidate.userId), eq(tasks.scheduleVersion, candidate.scheduleVersion));
+    const [claimed] = await db.update(tasks).set({ reminderLeaseUntil: leaseUntil })
+      .where(and(ownedVersion, pending(now))).returning().run();
+    if (!claimed) { result.skipped++; continue; }
+    const claim = and(ownedVersion, eq(tasks.reminderLeaseUntil, leaseUntil));
+    // Recheck after claiming: completion, deletion or rescheduling cancels it.
+    const current = await db.select().from(tasks).where(and(claim, eq(tasks.completed, false), isNull(tasks.reminderSentAt))).get();
+    if (!current) { result.skipped++; continue; }
+    try {
+      await api.sendMessage({
+        chat_id: current.userId,
+        parse_mode: 'HTML',
+        text: `<b>Напоминание о задаче</b>\n\n${html(current.title)}\nДедлайн: ${formatDeadline(current)}\n№<code>${current.id}</code>`,
+        reply_markup: { inline_keyboard: [
+          [{ text: '✓ Выполнить', callback_data: `task:done:${current.id}` }],
+          [{ text: 'Открыть задачи', web_app: { url: APP_URL } }],
+        ] },
+      });
+      await db.update(tasks).set({ reminderSentAt: Date.now(), reminderLeaseUntil: null }).where(claim).run();
+      result.sent++;
+    } catch (error) {
+      // Keep the lease on transient failures to avoid rapid retries. Telegram
+      // does not supply a sendMessage idempotency key; a lost reply may duplicate.
+      const retrySeconds = error instanceof BotApiError ? error.parameters?.retry_after : null;
+      const nextLease = Number.isFinite(retrySeconds) && retrySeconds > 0
+        ? Math.max(leaseUntil, Date.now() + retrySeconds * 1000) : leaseUntil;
+      const permanent = error instanceof BotApiError && (error.code === 403
+        || (error.code === 400 && /chat not found|user is deactivated/i.test(error.description)));
+      await db.update(tasks).set(permanent ? { reminderAt: null, reminderLeaseUntil: null }
+        : { reminderLeaseUntil: nextLease }).where(claim).run();
+      result.failed++;
+      console.warn('Reminder delivery failed', { taskId: current.id, permanent });
+    }
+  }
+  return result;
+}
