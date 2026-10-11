@@ -122,3 +122,31 @@ getProfile, setTaskSchedule и processReminders без initData вернули H
 Реальный runtime getReminderCapabilities вернул enabled:false и precisionMinutes:5.
 Доставка напоминаний в реальный чат в этом обновлении не проверена: scheduler
 ещё не подключён.
+
+После создания пользователем marsen5689/SyToDoBot- 11 октября 2026 код и
+workflow загружены в main. Репозиторий публичный; перед загрузкой файлы
+проверены на наличие credential values, .tgcloud/.env исключены gitignore.
+Содержимое Actions Secret не читалось: его работоспособность подтверждена
+реальным запуском CLI из GitHub. Проверка только доступа:
+https://github.com/marsen5689/SyToDoBot-/actions/runs/38123735445 — success,
+getReminderCapabilities вернул enabled:false перед включением.
+
+После проверки подключения remindersEnabled установлен в true и опубликован
+только lib/reminder-config.js: cloud revision 4, новых миграций нет. Все 20
+backend-тестов, 4 браузерных сценария и build прошли. Тесты отключённого
+планировщика явно задают false, чтобы сохранять проверку безопасного отключения
+при включённой production-конфигурации. Actions обновлены до проверенных
+актуальных releases checkout v7.0.1 и setup-node v7.1.0.
+
+Обычный запуск dispatcher из GitHub:
+https://github.com/marsen5689/SyToDoBot-/actions/runs/38123846106 — success,
+processReminders вернул enabled:true, sent:0, failed:0, skipped:0. Выполнен
+настоящий запрос к SQLite, ожидающих задач не было. Workflow active, cron
+2-59/5 * * * *, ветка main. Получение сообщения реальным пользователем пока
+не подтверждено; пользователю предложено создать задачу с ближайшим сроком.
+
+getReminderCapabilities в Telegram runtime вернул enabled:true. CLI run
+processReminders с maintenanceJob только в input и обычным контекстом отклонён
+EndpointError FORBIDDEN. Публичные getReminderCapabilities и processReminders
+без initData, в том числе с подставленным ctx в JSON body, вернули HTTP 401.
+CLI status подтвердил синхронизацию revision 4, webhook и 9 статических файлов.

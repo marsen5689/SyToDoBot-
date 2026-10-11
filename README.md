@@ -10,9 +10,11 @@ SQLite через `sdk/db`. Без VPS и отдельного backend-хост�
 ошибок, пустого списка и запуска вне Telegram.
 
 Опубликованы дедлайны с датой и временем, изменение и удаление срока,
-отметка просрочки и backend напоминаний в личном чате (cloud revision 3).
+отметка просрочки и backend напоминаний в личном чате.
 Миграция добавила 7 полей и индекс без удаления существующих данных.
-Автоматическая отправка ожидает подключения внешнего планировщика и отключена.
+Автоматические напоминания включены (cloud revision 4): планировщик GitHub
+Actions в [marsen5689/SyToDoBot-](https://github.com/marsen5689/SyToDoBot-)
+запускает официальный Telegram CLI примерно каждые 5 минут.
 
 ## Структура
 
@@ -44,7 +46,7 @@ SyToDoBot/
 │   ├── lib/task-service.js    # общая логика для чата и Mini App
 │   ├── lib/bot.js             # команды, меню и inline-кнопки
 │   ├── lib/reminders.js       # отправка, lease и отмена устаревших задач
-│   ├── lib/reminder-config.js # напоминания отключены до подключения scheduler
+│   ├── lib/reminder-config.js # напоминания включены; точность scheduler 5 минут
 │   ├── handlers/message.js    # обработка команд и сообщений
 │   ├── handlers/callback_query.js # обработка inline-кнопок
 │   └── endpoints/
@@ -64,7 +66,7 @@ SyToDoBot/
 │   └── browser/app.spec.ts    # интерфейс с официальным WebApp SDK
 ├── scripts/check-backend.mjs  # синтаксис и ограничения runtime
 ├── scripts/run-reminders.mjs  # внешний runner официального CLI
-├── .github/workflows/task-reminders.yml # подготовленный workflow, не подключён
+├── .github/workflows/task-reminders.yml # подключённый GitHub Actions scheduler
 ├── public/favicon.svg
 ├── index.html
 ├── vite.config.ts
@@ -177,6 +179,7 @@ npx tgcloud run endpoints/getProfile '{}' --ctx '{ initData: { user: { id: 123, 
 По разрешению пользователя проект опубликован 10 октября 2026; обновлённый
 монохромный интерфейс — cloud revision 2. Дедлайны и backend напоминаний
 опубликованы 11 октября 2026 — cloud revision 3.
+В тот же день подключён GitHub Actions и включены напоминания — revision 4.
 Таблица tasks создана безопасной миграцией. Webhook установлен для message и
 callback_query, накопленные обновления обработаны. Mini App доступен по адресу
 https://app8347651382.tgcloud.ai/.
@@ -287,22 +290,17 @@ Mini App продолжает использовать только провер
 документированы cron, persistent timers или scheduled jobs. Работающий при
 закрытом Mini App вариант: внешний GitHub Actions scheduler запускает
 официальный CLI; база, обработчик и Bot API остаются на Telegram Serverless.
-Workflow подготовлен локально, но не подключён к GitHub. Пока
-`tgcloud/lib/reminder-config.js` содержит `remindersEnabled=false`, backend
-запрещает создание напоминаний, а форма показывает их недоступность.
+Workflow подключён в созданном пользователем публичном репозитории
+[marsen5689/SyToDoBot-](https://github.com/marsen5689/SyToDoBot-), ветка main.
+CLI Access хранится в Repository Actions secret `TGCLOUD_TOKEN`; runner проверяет,
+что токен относится к app8347651382, и не выводит его значение.
+`tgcloud/lib/reminder-config.js` содержит `remindersEnabled=true`.
 
-Пользователь выбрал GitHub Actions в аккаунте `marsen5689`. Проверено, что
-подключение имеет `contents:write`, `workflows:write` и `actions:write`, но
-не имеет прав создания репозитория и управления Actions Secrets. Создание
-`marsen5689/SyToDoBot` и запрос публичного ключа Actions Secrets завершились
-`Resource not accessible by integration` (403). Репозиторий не создан,
-секрет не передан, workflow не запущен.
-
-Для завершения пользователь должен создать приватный `marsen5689/SyToDoBot`
-и добавить Repository Actions secret `TGCLOUD_TOKEN` со своим CLI Access token.
-После этого можно загрузить подготовленные исходники и workflow существующим
-подключением, проверить запуск, включить `remindersEnabled` и опубликовать
-модуль настройки.
+Доступ из GitHub проверен запуском `verify_only=true`, который вызывает только
+getReminderCapabilities. После включения выполнен обычный запуск processReminders:
+enabled:true, sent:0, failed:0, skipped:0. Workflow имеет состояние active и cron
+`2-59/5 * * * *`. Пустой результат подтверждает успешный запрос к настоящей SQLite;
+получение сообщения в пользовательском чате требует задачи с наступившим напоминанием.
 
 Общая последовательность подключения в новом окружении:
 
@@ -314,14 +312,17 @@ Workflow подготовлен локально, но не подключён �
 3. Разместить исходники в приватном GitHub-репозитории, включить Actions и
    добавить Repository Actions secret `TGCLOUD_TOKEN` с CLI Access token.
    Не коммитить токен или .tgcloud. У токена есть права разработчика проекта.
-4. Проверить выполнение workflow вручную, установить `remindersEnabled=true`,
-   повторить проверки и опубликовать модуль настройки. В текущем отключённом
-   состоянии runner намеренно сообщает ошибку, чтобы не показывать ложный успех.
+4. Проверить выполнение workflow вручную с `verify_only=true`, установить
+   `remindersEnabled=true`, повторить проверки и опубликовать модуль настройки.
+   Затем запустить workflow с `verify_only=false`. Если отправка отключена,
+   обычный runner намеренно сообщает ошибку, чтобы не показывать ложный успех.
 5. В реальном Telegram разрешить сообщения бота, создать задачу с будущим
    напоминанием и проверить доставку после закрытия Mini App.
 
 Для ручного запуска подключённого scheduler: `npm run reminders`. Он использует
 официальный `tgcloud run endpoints/processReminders` с контекстом разработчика.
+Из GitHub: Actions → Telegram task reminders → Run workflow, verify_only=false.
+CLI: `gh workflow run task-reminders.yml --repo marsen5689/SyToDoBot- --ref main -f verify_only=false`.
 Служебный endpoint требует корневой maintenanceJob, который нельзя задать
 через input или initData. В обычном Mini App такой вызов запрещён. Получатель
 сообщения берётся из владельца записи SQLite, не из аргументов runner.
